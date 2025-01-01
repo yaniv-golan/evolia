@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Evolia Documentation
+    url: https://github.com/yaniv-golan/evolia/tree/main/docs
+    about: Check our documentation for guides and troubleshooting
+  - name: Security Policy
+    url: https://github.com/yaniv-golan/evolia/security/policy
+    about: Please review our security policy for reporting security vulnerabilities
+  - name: Discussions
+    url: https://github.com/yaniv-golan/evolia/discussions
+    about: Ask questions and discuss with other community members 

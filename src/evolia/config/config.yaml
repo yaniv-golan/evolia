@@ -1,0 +1,300 @@
+# Security configuration
+security:
+  allowed_modules:
+    - os
+    - sys
+    - logging
+    - pathlib
+    - typing
+    - json
+    - yaml
+    
+  subprocess_policy:
+    level: default  # Options: default, prompt, system_tool, always
+    # default: Do not allow any subprocess calls
+    # prompt: Prompt user for approval during execution
+    # system_tool: Allow only when invoked by system tools
+    # always: Allow all subprocess calls (with logging)
+
+# ECS (Ephemeral-Candidate-System) configuration
+ecs:
+  # If true, ephemeral code that's successful can get automatically moved to 'candidates'
+  auto_candidate_enabled: true
+
+  # If true, candidate code that meets usage/success thresholds auto-promotes to system
+  auto_promote_enabled: false
+
+  # Thresholds for auto-promotion
+  auto_promote_usage: 3            # Minimum number of successful uses
+  auto_promote_success_ratio: 0.8  # Must have 80% success ratio
+
+  # Paths configuration
+  paths:
+    ephemeral: "run_artifacts/tmp"
+    candidates: "run_artifacts/candidates"
+    system: "tools/system"
+
+  # Candidate tracking
+  tracking:
+    metadata_file: "run_artifacts/candidates/candidates.json"
+    track_usage: true
+    track_success: true
+
+# File access configuration
+file_access:
+  default_policy: deny
+  permissions:
+    run_artifacts/:
+      read: true
+      write: true
+      create: true
+    tools/system/:
+      read: true
+      write: false
+      create: false
+
+# OpenAI configuration
+openai:
+  api_key_env_var: "OPENAI_API_KEY"
+  model: "gpt-4o-2024-08-06"  # Model with structured output support
+  max_retries: 5
+  retry_delay: 20
+  temperature: 0.2  # Lower temperature for more consistent structured output
+  max_tokens: 2000  # Reasonable limit for our use case
+  structured_output:
+    strict: true
+    max_nesting_depth: 5
+    max_enum_values: 20
+
+validation:
+  max_syntax_lint_retries: 3
+  max_runtime_retries: 3
+  compile_check: true
+  run_tests: true
+  naming_conventions:
+    function_prefix: ""
+    param_style: "snake_case"
+  security_checks:
+    - "no_system_calls"
+    - "no_file_operations"
+    - "no_eval_exec"
+    - "no_subprocess"
+
+allowed_modules:
+  # Core libraries with version requirements
+  requests: "2.25.0"  # Minimum version required
+  pandas: "1.2.0"
+  numpy: "1.19.0"
+  markdownify: null  # No version requirement
+  bs4: null  # No version requirement
+
+  # Standard library modules (no version requirements)
+  json: null
+  csv: null
+  os: null
+  pathlib: null
+  typing: null
+  datetime: null
+  logging: null
+  time: null
+  sys: null
+
+library_management:
+  # Whether to check dependencies of allowed libraries
+  check_dependencies: true
+  
+  # Whether to prompt for missing libraries
+  prompt_for_missing: true
+  
+  # Whether to allow runtime library additions via CLI
+  allow_runtime_additions: false
+  
+  # Libraries that are always blocked
+  blocked_libraries:
+    - subprocess
+    - socket
+    - multiprocessing
+    
+  # Runtime library overrides (populated from CLI flags)
+  runtime_overrides:
+    allowed: []     # Populated from --allow-lib
+    blocked: []     # Populated from --block-lib
+
+file_access:
+  # Default policy for paths not explicitly listed
+  # Options: "deny" (default) or "allow"
+  default_policy: "deny"
+
+  # Base paths configuration
+  paths:
+    # Directory for temporary/ephemeral files
+    ephemeral_base: "run_artifacts"
+    # Directory for system tools
+    tools_base: "tools/system"
+    # Directory for data files
+    data_base: "data"
+    # Directory for logs
+    logs_base: "logs"
+
+  # Explicit path permissions
+  permissions:
+    # Ephemeral directory for generated code and outputs
+    - path: "${paths.ephemeral_base}"
+      description: "Directory for generated code and outputs"
+      access:
+        read: true
+        write: true
+        create: true
+      recursive: true  # Apply to subdirectories
+
+    # System tools directory
+    - path: "${paths.tools_base}"
+      description: "System tools directory"
+      access:
+        read: true
+        write: false
+        create: false
+      recursive: true
+
+    # Data directory with mixed permissions
+    - path: "${paths.data_base}"
+      description: "Data files directory"
+      access:
+        read: true
+        write: false
+        create: true
+      recursive: false
+
+    # Logs directory with append-only access
+    - path: "${paths.logs_base}"
+      description: "Log files directory"
+      access:
+        read: true
+        write: true  # Allows appending to existing files
+        create: true
+      recursive: true
+      append_only: true
+
+  # Runtime permission overrides (populated from CLI flags)
+  runtime_overrides:
+    read: []    # Populated from --allow-read
+    write: []   # Populated from --allow-write
+    create: []  # Populated from --allow-create
+
+  # Subprocess execution policy
+  subprocess_policy:
+    # Policy level options:
+    # - none: No subprocess calls allowed (most restrictive)
+    # - prompt: Prompt user for approval of each subprocess call
+    # - system_tool: Allow subprocess calls only from system tools
+    # - always: Allow all subprocess calls (least restrictive)
+    level: "none"
+    
+    # Rate limiting for subprocess calls
+    rate_limit:
+      enabled: true
+      max_calls: 10  # Maximum number of subprocess calls per period
+      period_seconds: 60  # Time period in seconds
+      
+    # Allowed commands (only used when level is "prompt" or "system_tool")
+    allowed_commands:
+      - "git"
+      - "pip"
+      - "python"
+    
+    # Blocked commands (always blocked regardless of policy level)
+    blocked_commands:
+      - "rm"
+      - "sudo"
+      - "chmod"
+      - "chown"
+
+python_generation:
+  prompt_template: |
+    
+    Write a Python function with these requirements:
+
+    Function Name: {function_name}
+    Parameters:
+    {parameters}
+    Return Type: {return_type}
+    Constraints:
+    {constraints}
+
+    Example Format:
+    {example_format}
+
+    Return only the function definition, no explanations.
+    
+  max_tokens: 500
+  temperature: 0.7
+  top_p: 0.9
+  run_tests: true
+  test_timeout: 5
+  
+  execution:
+    test_timeout: 5
+    max_code_size: 1000
+    allowed_builtins:
+      - "len"
+      - "range"
+      - "enumerate"
+      - "str"
+      - "int"
+      - "float"
+      - "bool"
+      - "list"
+      - "dict"
+      - "set"
+      - "tuple"
+      - "sum"
+      - "min"
+      - "max"
+      - "sorted"
+      - "reversed"
+      - "zip"
+      - "map"
+      - "filter"
+      - "any"
+      - "all"
+      - "abs"
+      - "round"
+      - "pow"
+      - "divmod"
+      - "isinstance"
+      - "issubclass"
+      - "hasattr"
+      - "getattr"
+      - "setattr"
+      - "delattr"
+      - "property"
+      - "staticmethod"
+      - "classmethod"
+
+network:
+  # Optional list of allowed domains. If empty, all domains are allowed
+  whitelist_domains: ["www.ynet.co.il"]
+  
+  # Rate limiting settings
+  rate_limit:
+    enabled: true
+    max_calls: 100  # Maximum number of calls allowed in the period
+    period: 60      # Time period in seconds
+    
+  # Network request logging settings
+  logging:
+    enabled: true
+    log_headers: true    # Whether to log request headers
+    log_params: true     # Whether to log request parameters
+    log_data: false     # Whether to log request body data
+    log_json: false     # Whether to log JSON request body
+    
+  # Network access settings
+  access:
+    allow_http: true     # Whether to allow HTTP (non-HTTPS) requests
+    allow_external: true # Whether to allow requests to external domains
+    
+  # Network security settings
+  security:
+    verify_ssl: true    # Whether to verify SSL certificate
+    allow_redirects: true # Whether to allow URL redirects 

@@ -1,0 +1,41 @@
+[
+    {
+        "name": "example_tool",
+        "filepath": "tools/system/example_tool.py",
+        "description": "An example tool that demonstrates the enhanced metadata structure",
+        "inputs": [
+            "input_path"
+        ],
+        "outputs": [
+            "output_path"
+        ],
+        "dependencies": [
+            "pandas>=1.2.0"
+        ],
+        "constraints": [
+            "Handles only CSV format"
+        ],
+        "version": "1.0.0",
+        "interface": {
+            "function_name": "process_data",
+            "parameters": [
+                {
+                    "name": "input_path",
+                    "type": "str",
+                    "description": "Path to the input file. Must be a CSV file."
+                }
+            ],
+            "return_type": "str",
+            "description": "Processes the input CSV file and returns the path to the processed output file.",
+            "examples": [
+                "process_data('/data/input.csv')  # Returns '/data/processed_input.csv'",
+                "process_data('data.csv')  # Returns 'processed_data.csv'"
+            ],
+            "constraints": [
+                "Input file must be in CSV format",
+                "Cannot handle files larger than 100MB",
+                "Returns relative path if input path is relative"
+            ]
+        }
+    }
+]

@@ -1,0 +1,23 @@
+{
+    "tools": [
+        {
+            "name": "test_tool",
+            "description": "A test tool for integration tests",
+            "filepath": "test_data/test_tool.py",
+            "interface": {
+                "inputs": {
+                    "input_data": {
+                        "type": "dict",
+                        "description": "Input data for the test tool"
+                    }
+                },
+                "outputs": {
+                    "result": {
+                        "type": "dict",
+                        "description": "Result from the test tool"
+                    }
+                }
+            }
+        }
+    ]
+}
