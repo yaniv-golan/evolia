@@ -13,6 +13,7 @@ from evolia.utils.exceptions import ExecutorError
 # Enable debug logging
 logging.basicConfig(level=logging.DEBUG)
 
+
 @pytest.fixture
 def mock_config():
     """Create mock configuration."""
@@ -20,7 +21,7 @@ def mock_config():
         "openai": {
             "model": "gpt-4o-2024-08-06",
             "api_key": "test-key",
-            "temperature": 0.7
+            "temperature": 0.7,
         },
         "python_generation": {
             "prompt_template": """
@@ -40,13 +41,14 @@ Example Format:
 
 Return only the function definition, no explanations.
 """
-        }
+        },
     }
+
 
 @pytest.fixture(autouse=True)
 def mock_openai():
     """Mock OpenAI API calls."""
-    with patch('evolia.integrations.openai_structured.OpenAI') as mock:
+    with patch("evolia.integrations.openai_structured.OpenAI") as mock:
         mock_client = MagicMock()
         mock_response = {
             "code": "def test_function(x: int) -> int:\n    return abs(x)",
@@ -54,26 +56,26 @@ def mock_openai():
                 "name": "test_function",
                 "parameters": [{"name": "x", "type": "int"}],
                 "return_type": "int",
-                "docstring": "Return the absolute value of the input number x."
+                "docstring": "Return the absolute value of the input number x.",
             },
             "validation_results": {"syntax_valid": True, "security_issues": []},
             "outputs": {},
-            "required_imports": []
+            "required_imports": [],
         }
         mock_client.chat.completions.create.return_value = MagicMock(
             id="test-id",
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=MagicMock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+            usage=MagicMock(prompt_tokens=10, completion_tokens=20, total_tokens=30),
         )
         mock.return_value = mock_client
         yield mock
 
+
 @pytest.fixture
 def executor(mock_config):
     """Create a test executor."""
-    return Executor(
-        config=mock_config
-    )
+    return Executor(config=mock_config)
+
 
 def test_execute_plan(executor):
     """Test basic plan execution."""
@@ -84,19 +86,17 @@ def test_execute_plan(executor):
             "function_name": "test_function",
             "parameters": [{"name": "x", "type": "int"}],
             "return_type": "int",
-            "description": "Return the square of the input number x. For example, if x is 5, return 25."
+            "description": "Return the square of the input number x. For example, if x is 5, return 25.",
         },
-        outputs={"result": OutputDefinition(type="str")}
+        outputs={"result": OutputDefinition(type="str")},
     )
-    
-    plan = Plan(
-        steps=[step],
-        artifacts_dir="test_artifacts"
-    )
-    
+
+    plan = Plan(steps=[step], artifacts_dir="test_artifacts")
+
     result = executor.execute_plan(plan)
     assert result is not None
     assert len(result) > 0
+
 
 def test_error_handling(executor):
     """Test error handling during execution."""
@@ -107,19 +107,17 @@ def test_error_handling(executor):
             "function_name": "test_function",
             "parameters": [{"name": "x", "type": "int"}],
             "return_type": "int",
-            "description": "Test function"
+            "description": "Test function",
         },
-        outputs={"result": OutputDefinition(type="str")}
+        outputs={"result": OutputDefinition(type="str")},
     )
-    
-    plan = Plan(
-        steps=[step],
-        artifacts_dir="test_artifacts"
-    )
-    
-    with patch.object(executor, '_execute_step', side_effect=Exception("Test error")):
+
+    plan = Plan(steps=[step], artifacts_dir="test_artifacts")
+
+    with patch.object(executor, "_execute_step", side_effect=Exception("Test error")):
         with pytest.raises(ExecutorError):
             executor.execute_plan(plan)
+
 
 def test_cleanup_and_artifacts(executor):
     """Test cleanup and artifacts handling."""
@@ -130,18 +128,15 @@ def test_cleanup_and_artifacts(executor):
             "function_name": "test_function",
             "parameters": [{"name": "x", "type": "int"}],
             "return_type": "int",
-            "description": "Return the absolute value of the input number x. For example, if x is -5, return 5."
+            "description": "Return the absolute value of the input number x. For example, if x is -5, return 5.",
         },
-        outputs={"result": OutputDefinition(type="str")}
+        outputs={"result": OutputDefinition(type="str")},
     )
-    
-    plan = Plan(
-        steps=[step],
-        artifacts_dir="test_artifacts"
-    )
-    
+
+    plan = Plan(steps=[step], artifacts_dir="test_artifacts")
+
     result = executor.execute_plan(plan)
     assert result is not None
-    
+
     # Check artifacts directory exists
-    assert os.path.exists("test_artifacts") 
+    assert os.path.exists("test_artifacts")

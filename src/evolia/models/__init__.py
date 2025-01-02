@@ -22,5 +22,5 @@ from .models import (
     CodeResponse,
     ToolParameter,
     ToolInterface,
-    OutputDefinition
+    OutputDefinition,
 )

@@ -20,7 +20,9 @@ Your response must include:
 6. 'outputs': Object mapping output names to types and descriptions
 7. 'required_imports': List of ALL import statements needed by the function"""
 
-FUNCTION_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + """
+FUNCTION_SYSTEM_PROMPT = (
+    BASE_SYSTEM_PROMPT
+    + """
 You specialize in generating Python functions that:
 1. EXACTLY match the requested interface:
    - Use the EXACT function name provided
@@ -31,13 +33,17 @@ You specialize in generating Python functions that:
 2. Have clear, descriptive docstrings
 3. Include comprehensive error handling
 4. Follow Python best practices"""
+)
 
-FIX_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + """
+FIX_SYSTEM_PROMPT = (
+    BASE_SYSTEM_PROMPT
+    + """
 You specialize in fixing Python code while:
 1. Preserving original functionality
 2. Maintaining existing interfaces
 3. Fixing specific errors
 4. Adding proper error handling"""
+)
 
 # Chain of thought templates
 FUNCTION_COT_TEMPLATE = """Let's approach this step by step:
@@ -66,20 +72,14 @@ FIX_COT_TEMPLATE = """Let's fix this step by step:
 BASE_VALIDATION_SCHEMA = {
     "type": "object",
     "properties": {
-        "code": {
-            "type": "string",
-            "description": "The complete Python code"
-        },
+        "code": {"type": "string", "description": "The complete Python code"},
         "validation_results": {
             "type": "object",
             "properties": {
                 "syntax_valid": {"type": "boolean"},
-                "security_issues": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                }
+                "security_issues": {"type": "array", "items": {"type": "string"}},
             },
-            "required": ["syntax_valid", "security_issues"]
+            "required": ["syntax_valid", "security_issues"],
         },
         "outputs": {
             "type": "object",
@@ -90,18 +90,18 @@ BASE_VALIDATION_SCHEMA = {
                     "properties": {
                         "type": {
                             "type": "string",
-                            "description": "The Python type of the output"
+                            "description": "The Python type of the output",
                         },
                         "reference": {
                             "type": "string",
                             "pattern": "^\\$[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*$",
-                            "description": "Reference in format $stepname.outputname"
-                        }
+                            "description": "Reference in format $stepname.outputname",
+                        },
                     },
-                    "required": ["type", "reference"]
+                    "required": ["type", "reference"],
                 }
-            }
-        }
+            },
+        },
     },
-    "required": ["code", "validation_results", "outputs"]
-} 
+    "required": ["code", "validation_results", "outputs"],
+}
