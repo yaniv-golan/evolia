@@ -42,6 +42,7 @@ from ..utils.exceptions import (
     RuntimeFixError,
     SyntaxFixError,
     ExecutorError,
+    PlanValidationError
 )
 from ..utils.logger import code_generation_context, validation_context
 from .code_generator import CodeGenerator, CodeGenerationConfig
@@ -1016,7 +1017,7 @@ class Executor2:
             return CodeGenerationResponse(
                 code=response['code'],
                 function_name=function_name,
-                parameters=parameters,
+                parameters=[Parameter(name=p['name'], type=p['type']) for p in response['function_info']['parameters']],
                 return_type=return_type,
                 validation_results=response['validation_results'],
                 description=description,
@@ -1231,14 +1232,18 @@ class Executor2:
             
             # Track outputs from this step
             for output_name, output_def in step.outputs.items():
+                # Add both reference formats
                 ref = f"${step.name}.{output_name}"
+                ref_curly = f"${{{step.name}.{output_name}}}"
                 step_outputs[ref] = output_def
+                step_outputs[ref_curly] = output_def
                 
                 # Check for duplicate output references
-                if ref in output_refs:
+                if ref in output_refs or ref_curly in output_refs:
                     raise PlanValidationError(f"Duplicate output reference found: {ref}")
                 output_refs.add(ref)
-            
+                output_refs.add(ref_curly)
+
         # Validate step order
         step_indices = {step.name: i for i, step in enumerate(plan.steps)}
         for step in plan.steps:
@@ -1250,19 +1255,32 @@ class Executor2:
                         raise PlanValidationError(f"Invalid dependency order: {step.name} depends on {dep}")
                     
         # Validate data flow
-        available_refs = set()
-        for step in plan.steps:
+        for i, step in enumerate(plan.steps):
             # Check input references
             for input_name, input_value in step.inputs.items():
-                if isinstance(input_value, str) and input_value.startswith('$'):
-                    if input_value not in available_refs:
-                        raise PlanValidationError(f"Step {step.name} requires unavailable reference: {input_value}")
-            
+                if isinstance(input_value, str) and ('${' in input_value or input_value.startswith('$')):
+                    # Extract the step name from the reference
+                    if '${' in input_value:
+                        # Handle ${step.output} format
+                        ref_step = input_value.split('${')[1].split('.')[0]  # Extract step name from ${step.output}
+                    else:
+                        # Handle $step.output format
+                        ref_step = input_value.split('.')[0][1:]  # Remove $ and get step name
+                    
+                    if ref_step not in step_indices:
+                        raise PlanValidationError(f"Step {step.name} references unknown step: {ref_step}")
+                    if step_indices[ref_step] >= i:
+                        raise PlanValidationError(f"Invalid data flow: {step.name} references output from step {ref_step} which hasn't been executed yet")
+                    if input_value not in output_refs and input_value.replace('${', '$') not in output_refs:
+                        raise PlanValidationError(f"Step {step.name} references unknown output: {input_value}")
+                                
             # Add output references
             for output_name in step.outputs:
                 ref = f"${step.name}.{output_name}"
-                available_refs.add(ref)
-            
+                ref_curly = f"${{{step.name}.{output_name}}}"
+                output_refs.add(ref)
+                output_refs.add(ref_curly)
+                            
         logger.debug("Plan dependencies validated", extra={
             'payload': {
                 'step_count': len(plan.steps),
@@ -1644,8 +1662,18 @@ class Executor2:
             self.logger.error(error_msg, exc_info=True)
             raise ExecutorError(error_msg, step, {'error': str(e)})
 
-    def _generate_code(self, request: CodeGenerationRequest) -> CodeGenerationResponse:
-        """Generate code using OpenAI, with retries for syntax/validation errors."""
+    def _generate_code(self, request: CodeGenerationRequest) -> Tuple[CodeGenerationResponse, Dict[str, Any]]:
+        """Generate code using the code generator.
+        
+        Args:
+            request: Code generation request
+            
+        Returns:
+            Tuple of (CodeGenerationResponse object, raw response data dictionary)
+            
+        Raises:
+            CodeGenerationError: If code generation fails
+        """
         logger = logging.getLogger('evolia')
         
         with code_generation_context(request) as gen_ctx:
@@ -1657,7 +1685,8 @@ class Executor2:
 Your response must be a valid JSON object, but before generating it, you must:
 
 1. Generate the function code according to the requirements
-2. Perform these validation checks:
+2. Identify ALL required imports (both for type hints and functionality)
+3. Perform these validation checks:
    a. Syntax validation:
       - Check if the code is valid Python syntax
       - Verify all required imports are included
@@ -1676,7 +1705,15 @@ Your response must be a valid JSON object, but before generating it, you must:
       - Check for unsafe operations
       - Verify no unauthorized imports
       - Ensure proper error handling
-"""
+
+Your response MUST include:
+1. 'code': The function code without imports
+2. 'required_imports': List of ALL import statements needed (e.g. ['from typing import List', 'import re'])
+3. 'function_name': The name of the function
+4. 'parameters': List of parameters with types
+5. 'return_type': Function return type
+6. 'validation_results': Object with syntax_valid and security_issues
+7. 'outputs': Object mapping output names to types and descriptions"""
 
                 # Generate code with OpenAI
                 response_data = self.code_generator.generate(
@@ -1684,7 +1721,7 @@ Your response must be a valid JSON object, but before generating it, you must:
                     template_vars={
                         'description': request.description,
                         'function_name': request.function_name,
-                        'parameters': request.parameters,
+                        'parameters': [{'name': p.name, 'type': p.type, 'description': p.description} for p in request.parameters],
                         'return_type': request.return_type,
                         'constraints': request.constraints,
                         'examples': request.examples,
@@ -1698,9 +1735,9 @@ Your response must be a valid JSON object, but before generating it, you must:
                 code_response = CodeResponse(
                     code=response_data["code"],
                     function_name=response_data["function_name"],
-                    parameters=[Parameter(name=p["name"], type=p["type"], description=p.get("description", "")) for p in response_data["parameters"]],
+                    parameters=response_data["parameters"],
                     return_type=response_data["return_type"],
-                    description=response_data["description"]
+                    description=request.description
                 )
                 
                 # Validate the generated code
@@ -1712,13 +1749,19 @@ Your response must be a valid JSON object, but before generating it, you must:
                     if llm_validation.get("security_issues"):
                         raise SecurityViolationError(f"LLM detected security issues: {', '.join(llm_validation['security_issues'])}")
                     
+                    # Get imports from the LLM response
+                    imports = response_data.get("required_imports", [])
+                    
+                    # Add imports to code for validation
+                    code_with_imports = "\n".join(imports) + "\n\n" + code_response.code
+                    
                     # Then perform our own validation
                     validation_results = validate_python_code(
-                        code_response.code,
+                        code_with_imports,
                         {
-                            'function_name': code_response.function_name,
-                            'parameters': code_response.parameters,
-                            'return_type': code_response.return_type
+                            'function_name': request.function_name,
+                            'parameters': request.parameters,
+                            'return_type': request.return_type
                         }
                     )
                     
@@ -1729,6 +1772,19 @@ Your response must be a valid JSON object, but before generating it, you must:
                     if not validation_results.is_valid:
                         raise CodeValidationError(
                             f"Code validation failed: {validation_results.get_error_messages()}"
+                        )
+                    
+                    # Validate that the generated interface matches the requested interface
+                    # Compare only name and type fields for parameters
+                    generated_params = [{k: p[k] for k in ['name', 'type']} for p in response_data["parameters"]]
+                    expected_params = [{k: getattr(p, k) for k in ['name', 'type']} for p in request.parameters]
+                    if generated_params != expected_params:
+                        raise CodeValidationError(
+                            f"Generated parameters do not match requested parameters: expected {expected_params}, got {generated_params}"
+                        )
+                    if response_data["return_type"] != request.return_type:
+                        raise CodeValidationError(
+                            f"Generated return type does not match requested return type: expected {request.return_type}, got {response_data['return_type']}"
                         )
                     
                     # Convert ValidationResult to ValidationResults
@@ -1748,7 +1804,8 @@ Your response must be a valid JSON object, but before generating it, you must:
                     if 'outputs' in response_data:
                         outputs.update(response_data['outputs'])
                     
-                    return CodeGenerationResponse(
+                    # Create the CodeGenerationResponse
+                    code_gen_response = CodeGenerationResponse(
                         code=code_response.code,
                         validation_results=validation_results_model,
                         outputs=outputs,
@@ -1757,6 +1814,9 @@ Your response must be a valid JSON object, but before generating it, you must:
                         return_type=code_response.return_type,
                         description=code_response.description
                     )
+                    
+                    # Return both responses
+                    return code_gen_response, response_data
                 
             except Exception as e:
                 logger.error(f"Failed to generate code: {str(e)}", exc_info=True)
@@ -1859,7 +1919,8 @@ Your response must be a valid JSON object, but before generating it, you must:
 Your response must be a valid JSON object, but before generating it, you must:
 
 1. Generate the function code according to the requirements
-2. Perform these validation checks:
+2. Identify ALL required imports (both for type hints and functionality)
+3. Perform these validation checks:
    a. Syntax validation:
       - Check if the code is valid Python syntax
       - Verify all required imports are included
@@ -1878,7 +1939,15 @@ Your response must be a valid JSON object, but before generating it, you must:
       - Check for unsafe operations
       - Verify no unauthorized imports
       - Ensure proper error handling
-"""
+
+Your response MUST include:
+1. 'code': The function code without imports
+2. 'required_imports': List of ALL import statements needed (e.g. ['from typing import List', 'import re'])
+3. 'function_name': The name of the function
+4. 'parameters': List of parameters with types
+5. 'return_type': Function return type
+6. 'validation_results': Object with syntax_valid and security_issues
+7. 'outputs': Object mapping output names to types and descriptions"""
 
         for attempt in range(max_retries):
             try:
@@ -1948,9 +2017,17 @@ Your response must be a valid JSON object, but before generating it, you must:
         
         try:
             # Create request from inputs
+            parameters = [
+                Parameter(
+                    name=p["name"],
+                    type=p["type"],
+                    description=p.get("description", "")
+                ) if isinstance(p, dict) else p
+                for p in resolved_inputs.get("parameters", [])
+            ]
             request = CodeGenerationRequest(
                 function_name=resolved_inputs["function_name"],
-                parameters=resolved_inputs.get("parameters", []),
+                parameters=parameters,
                 return_type=resolved_inputs.get("return_type"),
                 description=resolved_inputs.get("description"),
                 examples=resolved_inputs.get("examples", []),
@@ -1959,7 +2036,7 @@ Your response must be a valid JSON object, but before generating it, you must:
             
             logger.info(f"Generated code request with function name: {request.function_name}")
             
-            response = self._generate_code(request)
+            code_gen_response, response_data = self._generate_code(request)
             logger.info("Code generation successful")
             
             # Ensure artifacts directory exists and is clean
@@ -1975,8 +2052,15 @@ Your response must be a valid JSON object, but before generating it, you must:
             code_file = tmp_dir / f"{request.function_name}.py"
             logger.info(f"Writing code to file: {code_file}")
             
+            # Get imports from the LLM response
+            imports = response_data.get("required_imports", [])
+            logger.info(f"Required imports from LLM: {imports}")
+            
+            # Add the code with imports
+            code_with_imports = "\n".join(imports) + "\n\n" + code_gen_response.code
+            
             # Write the code
-            code_file.write_text(response.code)
+            code_file.write_text(code_with_imports)
             
             # Verify file was written
             if code_file.exists():
@@ -2013,6 +2097,9 @@ Your response must be a valid JSON object, but before generating it, you must:
             
         Returns:
             Dictionary containing the execution results
+            
+        Raises:
+            ExecutorError: If step execution fails
         """
         logger = self.logger
         logger.info("Starting code execution step %d", step_num)
@@ -2041,7 +2128,7 @@ Your response must be a valid JSON object, but before generating it, you must:
             except Exception as e:
                 logger.warning(f"Error checking path {path}: {str(e)}")
                 continue
-            
+                
         if not script_file:
             raise ExecutorError(f"Script file not found at any of: {[str(p) for p in script_paths]}")
             
@@ -2070,20 +2157,27 @@ Your response must be a valid JSON object, but before generating it, you must:
         logger.info(f"Found function: {func.__name__}")
         
         # Get parameters - exclude code_file/script_file from parameters
-        params = []
+        params = {}
         for name, value in resolved_inputs.items():
             if name not in ["code_file", "script_file"]:
-                params.append(value)
+                params[name] = value
         logger.info(f"Function parameters: {params}")
         
         success = False
         try:
             # Execute function
-            result = func(*params)
+            result = func(**params)
             logger.info(f"Function execution successful. Result: {result}")
             
             # Store and display the result
             output = {"result": result}
+            
+            # Store in data store with proper reference format
+            for output_name, output_value in output.items():
+                ref = f"${{{step.name}.{output_name}}}"
+                self.data_store[ref] = output_value
+                logger.info(f"Stored output in data store: {ref} = {output_value}")
+            
             if 'result' in output:
                 self.results['result'] = output['result']
                 print("\n" + "="*50)

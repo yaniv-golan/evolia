@@ -1,5 +1,14 @@
 import pytest
+import os
 from pathlib import Path
+
+@pytest.fixture
+def openai_api_key():
+    """Get OpenAI API key from environment variable."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        pytest.skip("OPENAI_API_KEY environment variable not set")
+    return api_key
 
 @pytest.fixture
 def config():
@@ -38,13 +47,13 @@ def mock_openai_config():
     return {
         "api_key": "test-key",
         "model": "gpt-4o-2024-08-06",
-        "temperature": 0.5,
-        "max_tokens": 100,
+        "temperature": 0.2,
+        "max_tokens": 1000,
         "top_p": 1.0,
         "frequency_penalty": 0.0,
         "presence_penalty": 0.0,
-        "allowed_modules": ["math", "typing"],
-        "allowed_builtins": ["len", "str", "int", "float"]
+        "allowed_modules": ["math", "typing", "datetime", "re", "json"],
+        "allowed_builtins": ["len", "str", "int", "float", "list", "dict", "set"]
     }
 
 @pytest.fixture

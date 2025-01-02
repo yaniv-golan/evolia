@@ -113,11 +113,6 @@ def get_subprocess_policy(config: Dict[str, Any]) -> Dict[str, Any]:
         - allowed_commands: Set of allowed command patterns
         - blocked_commands: Set of blocked command patterns
     """
-    global _subprocess_policy
-    
-    if _subprocess_policy is not None:
-        return _subprocess_policy
-        
     policy = config.get("subprocess_policy", {})
     
     # Get policy level with proper default
@@ -137,23 +132,11 @@ def get_subprocess_policy(config: Dict[str, Any]) -> Dict[str, Any]:
         })
         policy_level = "none"
     
-    _subprocess_policy = {
+    return {
         "level": policy_level,
         "allowed_commands": set(policy.get("allowed_commands", [])),
         "blocked_commands": set(policy.get("blocked_commands", []))
     }
-    
-    logger.debug("Subprocess policy initialized", extra={
-        'payload': {
-            'policy_level': policy_level,
-            'allowed_commands': list(_subprocess_policy["allowed_commands"]),
-            'blocked_commands': list(_subprocess_policy["blocked_commands"]),
-            'component': 'security',
-            'operation': 'get_policy'
-        }
-    })
-    
-    return _subprocess_policy
 
 def extract_command(node: ast.Call) -> Optional[str]:
     """Extract command from a subprocess call node.
@@ -368,332 +351,349 @@ class SubprocessRateLimiter:
         return True
 
 class SecurityVisitor(ast.NodeVisitor):
-    """AST visitor for security checks"""
+    """AST visitor for security checks."""
+    
     def __init__(self, config: Dict[str, Any], ephemeral_dir: Optional[str] = None, invoked_by_tool: bool = False):
+        """Initialize security visitor.
+        
+        Args:
+            config: Security configuration dictionary
+            ephemeral_dir: Optional directory for temporary files
+            invoked_by_tool: Whether this visitor is invoked by a system tool
+        """
+        super().__init__()
         self.config = config
         self.ephemeral_dir = ephemeral_dir
-        self.violations: Dict[str, List[str]] = {}
-        self.imported_modules: Set[str] = set()
-        self.current_function: Optional[ast.FunctionDef] = None
         self.invoked_by_tool = invoked_by_tool
-        
-        # Get enabled security checks
+        self.violations = {}
         self.enabled_checks = validate_security_checks(config)
         
         # Initialize library manager
         self.library_manager = LibraryManager(config)
+        logger.debug("Library manager initialized")
         
-        # Get subprocess policy configuration lazily
-        subprocess_policy = get_subprocess_policy(config)
-        self.policy_level = subprocess_policy["level"]
-        self.allowed_commands = subprocess_policy["allowed_commands"]
-        self.blocked_commands = subprocess_policy["blocked_commands"]
-        
-        # Get rate limiter lazily
+        # Initialize rate limiter
         self.rate_limiter = get_rate_limiter(config)
         
-        logger.debug("Initialized SecurityVisitor", extra={
-            'payload': {
-                'policy_level': self.policy_level,
-                'allowed_commands': list(self.allowed_commands),
-                'blocked_commands': list(self.blocked_commands),
-                'invoked_by_tool': self.invoked_by_tool,
-                'enabled_checks': list(self.enabled_checks),
-                'component': 'security'
-            }
-        })
+        # Initialize subprocess policy
+        self.subprocess_policy = get_subprocess_policy(config)
+        
+        logger.debug("Initialized SecurityVisitor")
     
     def _should_check(self, check_name: str) -> bool:
-        """Check if a security check is enabled.
-        
-        Args:
-            check_name: Name of the security check
-            
-        Returns:
-            bool: True if check is enabled
-        """
+        """Check if a security check is enabled."""
         return check_name in self.enabled_checks
     
     def visit_Import(self, node: ast.Import):
-        """Check imported modules"""
+        """Check import statements."""
         if not self._should_check('imports'):
             return
             
-        allowed_modules = set(self.config.get('allowed_modules', []))
         for name in node.names:
-            module = name.name.split('.')[0]
-            self.imported_modules.add(module)
-            if module not in allowed_modules:
-                self._add_violation('imports', f"Import of module '{module}' is not allowed")
-            
-        # Validate imports using library manager
-        errors = self.library_manager.validate_imports(self.imported_modules)
-        if errors:
-            for error in errors:
-                self._add_violation('imports', error)
-            
-        self.generic_visit(node)
+            if name.name in self.config.get('blocked_modules', []):
+                self._add_violation('imports', f"Import of module '{name.name}' is blocked")
         
+        self.generic_visit(node)
+    
     def visit_ImportFrom(self, node: ast.ImportFrom):
-        """Check from-imports"""
+        """Check import from statements."""
         if not self._should_check('imports'):
             return
             
-        allowed_modules = set(self.config.get('allowed_modules', []))
-        if node.module:
-            module = node.module.split('.')[0]
-            self.imported_modules.add(module)
-            if module not in allowed_modules:
-                self._add_violation('imports', f"Import of module '{module}' is not allowed")
-            
-            # Validate imports using library manager
-            errors = self.library_manager.validate_imports({module})
-            if errors:
-                for error in errors:
-                    self._add_violation('imports', error)
-                    
-        self.generic_visit(node)
+        module = node.module or ''
+        if module in self.config.get('blocked_modules', []):
+            self._add_violation('imports', f"Import from module '{module}' is blocked")
         
+        self.generic_visit(node)
+    
     def visit_Call(self, node: ast.Call):
-        """Check function calls"""
-        # Check for eval/exec
+        """Check function calls."""
         if isinstance(node.func, ast.Name):
             func_name = node.func.id
-            if func_name in ['eval', 'exec']:
-                self._add_violation(
-                    'system_calls',
-                    f"Use of {func_name}() is not allowed"
-                )
-                
-        # Check for subprocess calls
-        if isinstance(node.func, ast.Attribute):
-            if isinstance(node.func.value, ast.Name) and node.func.value.id == 'subprocess':
-                if not self._should_check('subprocess'):
-                    return
-                # Extract command from subprocess call
-                if hasattr(node, "args") and len(node.args) > 0:
-                    if isinstance(node.args[0], ast.Constant):
-                        command = str(node.args[0].value)
-                    elif isinstance(node.args[0], ast.List):
-                        command = " ".join(str(elt.value) for elt in node.args[0].elts if isinstance(elt, ast.Constant))
-                    else:
-                        command = "<unknown>"
-                        
-                    # During validation, add to violations
-                    if hasattr(self, '_validating') and self._validating:
-                        try:
-                            self.check_subprocess_call(node, command)
-                        except SecurityViolationError as e:
-                            if "not allowed under default policy" in str(e):
-                                self._add_violation('subprocess', "Subprocess calls are not allowed under default policy")
-                            elif "only allowed from system tools" in str(e):
-                                self._add_violation('subprocess', "Subprocess calls are only allowed from system tools")
-                            else:
-                                self._add_violation('subprocess', str(e))
-                    else:
-                        # During testing, let the error propagate
-                        self.check_subprocess_call(node, command)
-                
-            # Check for system/popen calls
-            elif node.func.attr in ['system', 'popen']:
-                if not self._should_check('system_calls'):
-                    return
-                self._add_violation(
-                    'system_calls',
-                    f"Use of {node.func.attr}() is not allowed"
-                )
-                
-        self.generic_visit(node)
+            if func_name in {'system', 'popen'}:
+                self._add_violation('system_calls', f"Direct {func_name}() call detected")
         
+        elif isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name):
+                if node.func.value.id == 'subprocess':
+                    command = extract_command(node)
+                    if command:
+                        self.check_subprocess_call(node, command)
+                elif node.func.value.id == 'os' and node.func.attr in {'system', 'popen'}:
+                    self._add_violation('system_calls', f"os.{node.func.attr}() call detected")
+        
+        self.generic_visit(node)
+    
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        """Track current function and check for nested functions"""
-        if self.current_function and self._should_check('nested_functions'):
-            self._add_violation(
-                'nested_functions',
-                f"Nested function definition: {node.name} inside {self.current_function.name}"
-            )
-        else:
-            self.current_function = node
-            self.generic_visit(node)
-            self.current_function = None
-            
+        """Check function definitions."""
+        if self._should_check('nested_functions'):
+            # Check for nested function definitions
+            for child in ast.walk(node):
+                if isinstance(child, ast.FunctionDef) and child is not node:
+                    self._add_violation('nested_functions', "Nested function definition detected")
+                    break
+        
+        # Always traverse into the function body to check for other violations
+        self.generic_visit(node)
+    
     def visit_Global(self, node: ast.Global):
-        """Check for global statements"""
+        """Check global statements."""
         if not self._should_check('globals'):
             return
             
-        if self.current_function:
-            for name in node.names:
-                self._add_violation(
-                    'globals',
-                    f"Use of global variable '{name}' in function {self.current_function.name}"
-                )
-        self.generic_visit(node)
+        for name in node.names:
+            self._add_violation('globals', f"Global statement for '{name}' detected")
         
+        self.generic_visit(node)
+    
     def visit_Nonlocal(self, node: ast.Nonlocal):
-        """Check for nonlocal statements"""
+        """Check nonlocal statements."""
         if not self._should_check('nonlocals'):
-            return
+            return self.generic_visit(node)
             
-        if self.current_function:
-            for name in node.names:
-                self._add_violation(
-                    'nonlocals',
-                    f"Use of nonlocal variable '{name}' in function {self.current_function.name}"
-                )
-        self.generic_visit(node)
+        # Add violations for each nonlocal name
+        for name in node.names:
+            logger.warning(f"Nonlocal statement detected: {name}", extra={
+                'payload': {
+                    'name': name,
+                    'component': 'security',
+                    'operation': 'check_nonlocal'
+                }
+            })
+            self._add_violation('nonlocals', "nonlocal statement detected")
         
+        # Continue traversing child nodes
+        self.generic_visit(node)
+    
     def _add_violation(self, check: str, message: str):
-        """Add a security violation"""
+        """Add a security violation."""
         if check not in self.violations:
             self.violations[check] = []
         self.violations[check].append(message)
-
-    def finalize(self):
-        """Perform final validation checks"""
-        # Check dependencies if enabled
-        if self._should_check('dependencies') and \
-           self.config.get('library_management', {}).get('check_dependencies', False):
-            disallowed_deps = self.library_manager.check_dependencies(self.imported_modules)
-            if disallowed_deps:
-                for dep in disallowed_deps:
-                    self._add_violation(
-                        'dependencies',
-                        f"Disallowed dependency: {dep}"
-                    )
+    
+    def finalize(self) -> Dict[str, List[str]]:
+        """Finalize security checks and return violations.
         
-        # Return all violations
+        Returns:
+            Dictionary mapping check names to lists of violation messages
+        """
+        # Just return the violations, let validate_code_security handle raising the error
         return self.violations
-
+    
     def check_subprocess_call(self, node: ast.Call, command: str) -> None:
-        """Check if subprocess call is allowed based on policy and rate limits"""
-        logger.debug("Checking subprocess call", extra={
+        """Check if a subprocess call is allowed by policy.
+        
+        Args:
+            node: AST Call node representing the subprocess call
+            command: Extracted command string
+        """
+        # Check for shell=True
+        for kw in node.keywords:
+            if kw.arg == 'shell' and isinstance(kw.value, ast.Constant) and kw.value.value:
+                logger.warning("Subprocess call denied: shell execution not allowed", extra={
+                    'payload': {
+                        'command': command,
+                        'component': 'security',
+                        'operation': 'check_subprocess'
+                    }
+                })
+                self._add_violation("subprocess", "shell execution")
+                return
+        
+        # Parse command into parts
+        try:
+            command_parts = parse_command(command)
+            if not command_parts:
+                self._add_violation("subprocess", "Empty command")
+                return
+        except Exception as e:
+            self._add_violation("subprocess", f"Invalid command format: {str(e)}")
+            return
+        
+        # Get base command (first part)
+        base_command = command_parts[0]
+        
+        # Check policy level
+        if self.subprocess_policy["level"] == "none":
+            logger.warning("Subprocess call denied: policy level none", extra={
+                'payload': {
+                    'command': command,
+                    'component': 'security',
+                    'operation': 'check_subprocess'
+                }
+            })
+            self._add_violation("subprocess", "Subprocess calls are not allowed under default policy")
+            return
+        
+        # Check blocked commands first (applies to all policy levels)
+        if base_command in self.subprocess_policy.get("blocked_commands", []):
+            logger.warning("Subprocess call denied: blocked command", extra={
+                'payload': {
+                    'command': command,
+                    'base_command': base_command,
+                    'component': 'security',
+                    'operation': 'check_subprocess'
+                }
+            })
+            self._add_violation("subprocess", "blocked command")
+            return
+        
+        # Check allowed commands based on policy level
+        if self.subprocess_policy["level"] == "system_tool":
+            if not self.invoked_by_tool:
+                logger.warning("Subprocess call denied: system tool policy", extra={
+                    'payload': {
+                        'command': command,
+                        'base_command': base_command,
+                        'component': 'security',
+                        'operation': 'check_subprocess'
+                    }
+                })
+                self._add_violation("subprocess", "system tool")
+                return
+            
+            if base_command not in self.subprocess_policy.get("allowed_commands", []):
+                logger.warning("Subprocess call denied: not an allowed system tool", extra={
+                    'payload': {
+                        'command': command,
+                        'base_command': base_command,
+                        'component': 'security',
+                        'operation': 'check_subprocess'
+                    }
+                })
+                self._add_violation("subprocess", "system tool")
+                return
+                
+        elif self.subprocess_policy["level"] == "always":
+            allowed_commands = self.subprocess_policy.get("allowed_commands", [])
+            if allowed_commands and base_command not in allowed_commands:
+                logger.warning("Subprocess call denied: not in allowed list", extra={
+                    'payload': {
+                        'command': command,
+                        'base_command': base_command,
+                        'component': 'security',
+                        'operation': 'check_subprocess'
+                    }
+                })
+                self._add_violation("subprocess", f"Command '{base_command}' is not in allowed commands list")
+                return
+        
+        # Check rate limit if enabled
+        if self.rate_limiter and not self.rate_limiter.check_rate_limit():
+            logger.warning("Subprocess call denied: rate limit exceeded", extra={
+                'payload': {
+                    'command': command,
+                    'component': 'security',
+                    'operation': 'check_subprocess'
+                }
+            })
+            self._add_violation("subprocess", "rate limit")
+            return
+        
+        # If we get here, the command is allowed
+        logger.debug(f"Subprocess call allowed: {command}", extra={
             'payload': {
                 'command': command,
-                'policy_level': self.policy_level,
-                'allowed_commands': list(self.allowed_commands),
-                'blocked_commands': list(self.blocked_commands),
-                'invoked_by_tool': self.invoked_by_tool,
+                'policy_level': self.subprocess_policy["level"],
                 'component': 'security',
                 'operation': 'check_subprocess'
             }
         })
-
-        # Extract and validate command
-        extracted_cmd = extract_command(node)
-        if extracted_cmd is None:
-            raise SecurityViolationError("Could not safely extract command from subprocess call")
+    
+    def visit(self, node: ast.AST) -> None:
+        """Override visit to ensure violations are properly propagated."""
+        # First visit the node and its children
+        super().visit(node)
         
-        try:
-            validate_command(extracted_cmd)
-        except SecurityViolationError as e:
-            self._add_violation('subprocess', str(e))
-            raise
-
-        # Check blocked commands first
-        if any(cmd in command for cmd in self.blocked_commands):
-            logger.warning("Blocked command attempted", extra={
+        # After visiting, check if we have any violations
+        if self.violations:
+            # Format violation messages
+            violation_messages = []
+            for check, messages in self.violations.items():
+                for message in messages:
+                    violation_messages.append(f"{check}: {message}")
+            
+            logger.warning("Security violations found", extra={
                 'payload': {
-                    'command': command,
-                    'blocked_commands': list(self.blocked_commands)
+                    'violations': self.violations,
+                    'component': 'security',
+                    'operation': 'validate'
                 }
             })
-            raise SecurityViolationError(f"Command '{command}' is blocked by policy")
-        
-        # Apply policy level checks
-        if self.policy_level == "none":
-            logger.warning("Subprocess call denied by none policy", extra={
-                'payload': {'command': command}
-            })
-            raise SecurityViolationError("Subprocess calls are not allowed under default policy")
-        
-        elif self.policy_level == "system_tool":
-            if not self.invoked_by_tool and not any(cmd in command for cmd in self.allowed_commands):
-                logger.warning("Non-system tool command attempted", extra={
-                    'payload': {
-                        'command': command,
-                        'allowed_commands': list(self.allowed_commands)
-                    }
-                })
-                raise SecurityViolationError("Subprocess calls are only allowed from system tools")
-        
-        elif self.policy_level == "always":
-            logger.info("Subprocess call allowed by always policy", extra={
-                'payload': {'command': command}
-            })
-        else:
-            logger.warning("Invalid policy level", extra={
-                'payload': {
-                    'policy_level': self.policy_level,
-                    'command': command
-                }
-            })
-            raise SecurityViolationError(f"Invalid subprocess policy level: {self.policy_level}")
+            raise SecurityViolationError(
+                f"Security violations found: {', '.join(violation_messages)}",
+                str(node),
+                {'violations': self.violations}
+            )
 
-        # Check rate limit if enabled (after policy checks)
-        if self.rate_limiter and not self.rate_limiter.check_rate_limit():
-            raise SecurityViolationError("Subprocess rate limit exceeded")
-
-        logger.info("Subprocess call allowed", extra={
-            'payload': {
-                'command': command,
-                'policy_level': self.policy_level,
-                'invoked_by_tool': self.invoked_by_tool
-            }
-        })
-
-def validate_code_security(
-    code: str,
-    config: Dict[str, Any]
-) -> Dict[str, List[str]]:
-    """
-    Validate code against security constraints
+def validate_code_security(code: str, config: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Validate code against security configuration.
     
     Args:
-        code: The Python code to validate
-        config: Security configuration containing:
-            - allowed_modules: List of allowed imports
-            - security_checks: List of enabled security checks
-            
+        code: Python code to validate
+        config: Security configuration dictionary
+        
     Returns:
         Dictionary mapping check names to lists of violation messages
         
     Raises:
         SecurityViolationError: If any security violations are found
     """
-    logger.debug("Starting security validation", extra={
-        'payload': {
-            'code_length': len(code),
-            'config': config
-        }
-    })
+    logger.debug("Starting security validation")
     
+    # Validate security checks
+    enabled_checks = validate_security_checks(config)
+    
+    # Initialize library manager
+    library_manager = LibraryManager(config)
+    logger.debug("Library manager initialized")
+    
+    # Initialize rate limiter
+    rate_limiter = get_rate_limiter(config)
+    
+    # Initialize subprocess policy
+    subprocess_policy = get_subprocess_policy(config)
+    
+    # Parse code into AST
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
-        logger.error("Syntax error during security validation", exc_info=True)
         raise SecurityViolationError(
-            message="Invalid syntax",
-            violations={'syntax': [str(e)]},
-            code=code
+            f"Syntax error in code: {str(e)}",
+            code,
+            {'error': str(e)}
         )
     
+    # Visit AST with security visitor
     visitor = SecurityVisitor(config)
-    visitor._validating = True  # Set validation mode
     visitor.visit(tree)
     
-    if visitor.violations:
+    # Get violations
+    violations = visitor.finalize()
+    
+    # Check for violations
+    if violations:
+        # Format violation messages
+        violation_messages = []
+        for check, messages in violations.items():
+            for message in messages:
+                violation_messages.append(f"{check}: {message}")
+            
         logger.warning("Security violations found", extra={
-            'payload': {'violations': visitor.violations}
+            'payload': {
+                'violations': violations,
+                'component': 'security',
+                'operation': 'validate'
+            }
         })
         raise SecurityViolationError(
-            message="Security violations found",
-            violations=visitor.violations,
-            code=code
+            f"Security violations found: {', '.join(violation_messages)}",
+            code,
+            {'violations': violations}
         )
     
     logger.debug("Security validation passed")
-    return visitor.violations
+    return violations
 
 def create_safe_execution_environment() -> Dict[str, Any]:
     """

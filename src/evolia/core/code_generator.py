@@ -109,7 +109,8 @@ class CodeGenerator:
                 "validation_results": response.get("validation_results", {
                     "security_issues": []
                 }),
-                "outputs": response.get("outputs", {})
+                "outputs": response.get("outputs", {}),
+                "required_imports": response.get("required_imports", [])
             }
             
             return processed_response

@@ -3,8 +3,23 @@ from typing import Dict, List, Any, Optional, Set, Union, Tuple
 
 # Allowed types for function parameters and return values
 ALLOWED_TYPES = {
-    "Tuple", "Union", "bool", "float", "Any", "Dict", "str", "int",
-    "set", "dict", "list", "tuple", "Set", "Optional", "List"
+    # Basic types
+    "str", "int", "float", "bool", "Any", "None",
+    # Collection types
+    "list", "dict", "set", "tuple",
+    "List", "Dict", "Set", "Tuple",
+    # Optional and Union types
+    "Optional", "Union",
+    # Complex types
+    "List[str]", "List[int]", "List[float]", "List[bool]", "List[Any]",
+    "Dict[str, Any]", "Dict[str, str]", "Dict[str, int]", "Dict[str, float]",
+    "List[Dict[str, Any]]", "List[Dict[str, str]]", "List[Dict[str, int]]",
+    "Optional[str]", "Optional[int]", "Optional[float]", "Optional[bool]",
+    "Union[str, int]", "Union[str, float]", "Union[int, float]",
+    # Callable types
+    "Callable", "Callable[..., Any]",
+    "Callable[[Any], Any]", "Callable[[Dict[str, Any]], Dict[str, Any]]",
+    "Callable[[str], str]", "Callable[[int], int]", "Callable[[float], float]"
 }
 
 @dataclass
@@ -16,6 +31,10 @@ class OutputDefinition:
     def from_dict(cls, data: Dict[str, Any]) -> 'OutputDefinition':
         """Create an OutputDefinition from a dictionary."""
         return cls(type=data["type"])
+        
+    def __dict__(self):
+        """Make the class JSON serializable."""
+        return {"type": self.type}
 
 def is_valid_identifier(name: str) -> bool:
     """Check if a string is a valid Python identifier."""
@@ -41,11 +60,16 @@ class Parameter:
         if self.type not in ALLOWED_TYPES:
             raise ValueError(f"Invalid parameter type: {self.type}")
     
+    def __dict__(self):
+        """Make the class JSON serializable."""
+        return {
+            "name": self.name,
+            "type": self.type,
+            "description": self.description
+        }
+    
     # Valid Python types that can be used in parameters and outputs
-    valid_types = {
-        "str", "int", "float", "bool", "list", "dict", "set", "tuple",
-        "Any", "Optional", "Union", "List", "Dict", "Set", "Tuple"
-    }
+    valid_types = ALLOWED_TYPES
 
 @dataclass
 class PlanStep:
@@ -114,7 +138,7 @@ class SystemToolValidation(StepValidationBase):
             validation.matches_interface = False
             validation.validation_errors.append("System tools can only have one output")
         else:
-            output_type = next(iter(step.outputs.values())).get("type")
+            output_type = next(iter(step.outputs.values())).type
             if output_type != tool.interface.return_type:
                 validation.matches_interface = False
                 validation.validation_errors.append(f"Output type mismatch: expected {tool.interface.return_type}, got {output_type}")
@@ -354,13 +378,41 @@ class TestResults:
 
 @dataclass
 class SystemTool:
-    """System tool definition."""
+    """System tool metadata."""
     name: str
     description: str
     parameters: List[Parameter]
     outputs: Dict[str, OutputDefinition]
     permissions: Optional[Dict[str, List[str]]] = None
     filepath: Optional[str] = None
+    
+    @property
+    def interface(self):
+        """Get the function interface for this tool."""
+        return FunctionInterface(
+            function_name=self.name,
+            parameters=self.parameters,
+            return_type=next(iter(self.outputs.values())).type,
+            description=self.description
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the tool to a dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": [{"name": p.name, "type": p.type, "description": p.description} for p in self.parameters],
+            "outputs": {name: {"type": output.type} for name, output in self.outputs.items()},
+            "permissions": self.permissions,
+            "filepath": self.filepath
+        }
+    
+    def __str__(self) -> str:
+        return f"SystemTool(name={self.name})"
+
+    def __dict__(self):
+        """Make the class JSON serializable."""
+        return self.to_dict()
 
 @dataclass
 class CodeResponse:

@@ -142,7 +142,7 @@ def setup_logger(log_file: Optional[Path] = None, verbose: bool = False) -> logg
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(logging.DEBUG)
     file_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    file_handler.setFormatter(logging.Formatter(file_format))
+    file_handler.setFormatter(LogFormatter(file_format))
     logger.addHandler(file_handler)
     
     return logger

@@ -47,6 +47,14 @@ CODE_SCHEMA = {
             "type": "string",
             "description": "Clear description of the function's purpose"
         },
+        "required_imports": {
+            "type": "array",
+            "description": "List of import statements needed by the function (both for type hints and function body)",
+            "items": {
+                "type": "string",
+                "description": "Complete import statement (e.g. 'from typing import List' or 'import re')"
+            }
+        },
         "validation_results": {
             "type": "object",
             "properties": {
@@ -79,5 +87,5 @@ CODE_SCHEMA = {
             }
         }
     },
-    "required": ["code", "function_name", "parameters", "return_type", "validation_results", "outputs"]
+    "required": ["code", "function_name", "parameters", "return_type", "validation_results", "outputs", "required_imports"]
 } 

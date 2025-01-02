@@ -145,6 +145,25 @@ def call_openai_structured(
                     }
                 }
             })
+            
+            # Log full request details
+            logger.debug("FULL OPENAI REQUEST", extra={
+                'payload': {
+                    'component': 'openai',
+                    'operation': 'structured_call',
+                    'full_request': {
+                        'system_prompt': system_prompt,
+                        'user_prompt': user_prompt,
+                        'json_schema': json_schema,
+                        'model': model,
+                        'temperature': temperature,
+                        'max_tokens': max_tokens,
+                        'top_p': top_p,
+                        'frequency_penalty': frequency_penalty,
+                        'presence_penalty': presence_penalty
+                    }
+                }
+            })
 
             response = client.chat.completions.create(
                 model=model,

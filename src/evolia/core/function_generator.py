@@ -25,14 +25,17 @@ class FunctionGenerator:
 Requirements:
 {requirements}
 
-The function must:
-1. Be named: {function_name}
-2. Take these parameters: {parameters}
-3. Return: {return_type}
-4. Only use these modules: {allowed_modules}
-5. Only use these built-ins: {allowed_builtins}
-6. Include proper error handling
-7. Have comprehensive docstrings
+The function MUST EXACTLY match this interface:
+1. Name: {function_name}
+2. Parameters (EXACT names and types required):
+{parameters_structured}
+3. Return type (EXACT type required): {return_type}
+
+Additional requirements:
+1. Only use these modules: {allowed_modules}
+2. Only use these built-ins: {allowed_builtins}
+3. Include proper error handling
+4. Have comprehensive docstrings
 
 Additional context:
 {context}
@@ -73,7 +76,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
         self,
         requirements: str,
         function_name: str,
-        parameters: List[Dict[str, str]],
+        parameters: List[Any],  # Can be List[Parameter] or List[Dict[str, str]]
         return_type: str,
         context: str = ""
     ) -> Dict[str, Any]:
@@ -83,7 +86,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
         Args:
             requirements: Description of what the function should do
             function_name: Name of the function to generate
-            parameters: List of parameter dictionaries with name and type
+            parameters: List of Parameter objects or parameter dictionaries with name and type
             return_type: Return type of the function
             context: Additional context or constraints
             
@@ -99,8 +102,9 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
         })
         
         # Format parameters for prompt
-        params_str = ", ".join([
-            f"{p['name']}: {p['type']}"
+        params_structured = "\n".join([
+            f"   - name: {p.name if hasattr(p, 'name') else p['name']}"
+            f"\n     type: {p.type if hasattr(p, 'type') else p['type']}"
             for p in parameters
         ])
         
@@ -108,7 +112,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
         template_vars = {
             'requirements': requirements,
             'function_name': function_name,
-            'parameters': params_str,
+            'parameters_structured': params_structured,
             'return_type': return_type,
             'allowed_modules': ', '.join(sorted(self.code_generator.config.allowed_modules)),
             'allowed_builtins': ', '.join(sorted(self.code_generator.config.allowed_builtins)),

@@ -16,7 +16,7 @@ from ..models import (
     CodeGenerationResponse, CodeResponse, ExecutionRequest, ExecutionResponse,
     TestCase, TestResults, ValidationResults, SystemTool, FunctionInterface,
     InterfaceValidation, SystemToolValidation, GenerateCodeValidation, ExecuteCodeValidation,
-    StepValidationBase
+    StepValidationBase, OutputDefinition
 )
 from ..integrations.openai_structured import call_openai_structured
 from ..security.file_access import get_safe_open, FileAccessViolationError
@@ -305,19 +305,47 @@ def load_config() -> Dict[str, Any]:
         logger.error(f"Failed to load configuration: {str(e)}", exc_info=True)
         raise
 
-def load_system_tools() -> List[Dict[str, Any]]:
+def load_system_tools() -> Dict[str, SystemTool]:
     """Load available system tools from system_tools.json"""
     logger = logging.getLogger('evolia')
     tools_path = Path(__file__).parent.parent.parent.parent / "data" / "system_tools.json"
     logger.debug(f"Loading system tools from {tools_path}")
     try:
         with open(tools_path) as f:
-            tools = json.load(f)
+            tools_data = json.load(f)
+            tools = {}
+            for tool_data in tools_data:
+                # Convert interface parameters to Parameter objects
+                interface = tool_data.get("interface", {})
+                parameters = [
+                    Parameter(
+                        name=p["name"],
+                        type=p["type"],
+                        description=p.get("description", "")
+                    ) for p in interface.get("parameters", [])
+                ]
+                
+                # Convert outputs to OutputDefinition objects
+                outputs = {}
+                if "return_type" in interface:
+                    outputs["result"] = OutputDefinition(type=interface["return_type"])
+                
+                # Create SystemTool object
+                tool = SystemTool(
+                    name=tool_data["name"],
+                    description=tool_data["description"],
+                    parameters=parameters,
+                    outputs=outputs,
+                    permissions=tool_data.get("permissions"),
+                    filepath=tool_data.get("filepath")
+                )
+                tools[tool.name] = tool
+            
             logger.debug("System tools loaded successfully", extra={
                 'payload': {
                     'tool_count': len(tools),
-                    'tool_names': [t.get('name') for t in tools],
-                    'tool_paths': [t.get('filepath') for t in tools]
+                    'tool_names': list(tools.keys()),
+                    'tool_paths': [t.filepath for t in tools.values()]
                 }
             })
             return tools
@@ -339,14 +367,14 @@ def validate_step_interface(step: PlanStep, system_tools: Dict[str, SystemTool])
         validation.validation_errors = [f"Unknown tool: {step.tool}"]
         return validation
 
-def generate_plan(task: str, system_tools: List[Dict[str, Any]], config: Dict[str, Any], args: Any) -> Plan:
+def generate_plan(task: str, system_tools: Dict[str, SystemTool], config: Dict[str, Any], args: Any) -> Plan:
     """Generate an execution plan for a task.
     
     Args:
         task: Task description
-        system_tools: List of available system tools
+        system_tools: Dictionary of available system tools
         config: Configuration dictionary
-        args: Command line arguments
+        args: Command line arguments (can be dict or argparse.Namespace)
         
     Returns:
         Plan: Generated execution plan
@@ -358,6 +386,15 @@ def generate_plan(task: str, system_tools: List[Dict[str, Any]], config: Dict[st
     logger.info("Generating execution plan")
     
     try:
+        # Convert system tools to dictionaries for serialization
+        serializable_tools = {name: tool.to_dict() for name, tool in system_tools.items()}
+        
+        # Handle both dict and argparse.Namespace objects
+        allow_read = args["allow_read"] if isinstance(args, dict) else args.allow_read
+        allow_write = args["allow_write"] if isinstance(args, dict) else args.allow_write
+        allow_create = args["allow_create"] if isinstance(args, dict) else args.allow_create
+        default_policy = args["default_policy"] if isinstance(args, dict) else args.default_policy
+        
         # Call OpenAI to generate plan
         response = call_openai_structured(
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -367,13 +404,13 @@ def generate_plan(task: str, system_tools: List[Dict[str, Any]], config: Dict[st
             user_prompt=f"""Create a plan for the following task: "{task}"
 
 Available system tools:
-{json.dumps(system_tools, indent=2)}
+{json.dumps(serializable_tools, indent=2)}
 
 File Access Permissions:
-- Allowed read paths: {args.allow_read}
-- Allowed write paths: {args.allow_write}
-- Allowed create paths: {args.allow_create}
-- Default policy: {args.default_policy}
+- Allowed read paths: {allow_read}
+- Allowed write paths: {allow_write}
+- Allowed create paths: {allow_create}
+- Default policy: {default_policy}
 
 Plan Structure:
 1. For simple file I/O tasks (read/process/write), use a SINGLE step that:
@@ -446,12 +483,12 @@ IMPORTANT:
         logger.error(f"Failed to generate plan: {str(e)}")
         raise PlanGenerationError(f"Failed to generate plan: {str(e)}")
 
-def validate_plan(plan: Plan, system_tools: List[Dict[str, Any]], config: Dict[str, Any]) -> List[str]:
+def validate_plan(plan: Plan, system_tools: Dict[str, SystemTool], config: Dict[str, Any]) -> List[str]:
     """Validate an execution plan.
     
     Args:
         plan: Plan to validate
-        system_tools: List of available system tools
+        system_tools: Dictionary of available system tools
         config: Configuration dictionary
         
     Returns:
@@ -463,7 +500,7 @@ def validate_plan(plan: Plan, system_tools: List[Dict[str, Any]], config: Dict[s
         # Validate each step
         for i, step in enumerate(plan.steps):
             # Check tool exists
-            if step.tool not in ["generate_code", "execute_code"] and not any(t["name"] == step.tool for t in system_tools):
+            if step.tool not in ["generate_code", "execute_code"] and step.tool not in system_tools:
                 errors.append(f"Step {i + 1}: Unknown tool '{step.tool}'")
                 continue
                 
@@ -471,8 +508,8 @@ def validate_plan(plan: Plan, system_tools: List[Dict[str, Any]], config: Dict[s
             if step.tool in ["generate_code", "execute_code"]:
                 interface = None  # Standard interface
             else:
-                tool = next(t for t in system_tools if t["name"] == step.tool)
-                interface = tool["interface"]
+                tool = system_tools[step.tool]
+                interface = tool.interface
                 
             # Validate interface
             interface_errors = verify_interface(step.inputs, interface) if interface else []
@@ -496,16 +533,16 @@ def validate_plan(plan: Plan, system_tools: List[Dict[str, Any]], config: Dict[s
         
     return errors
 
-def execute_plan(plan: Plan, system_tools: List[Dict[str, Any]], config: Dict[str, Any], args: Any) -> None:
+def execute_plan(plan: Plan, system_tools: Dict[str, SystemTool], config: Dict[str, Any], args: Any) -> None:
     """Execute a validated plan.
     
     Args:
         plan: Plan to execute
-        system_tools: List of available system tools
+        system_tools: Dictionary of available system tools
         config: Configuration dictionary
         args: Command line arguments
     """
-    executor = Executor(config)
+    executor = Executor2(config)
     
     with execution_context("plan"):
         try:
@@ -526,8 +563,8 @@ def execute_plan(plan: Plan, system_tools: List[Dict[str, Any]], config: Dict[st
                 elif step.tool == "execute_code":
                     executor.execute_code(step.inputs, step.outputs)
                 else:
-                    # Find and execute system tool
-                    tool = next(t for t in system_tools if t["name"] == step.tool)
+                    # Get and execute system tool
+                    tool = system_tools[step.tool]
                     executor.execute_tool(tool, step.inputs, step.outputs)
                     
                 logger.info(f"Step {i + 1} completed successfully")

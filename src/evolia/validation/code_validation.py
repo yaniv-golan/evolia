@@ -29,6 +29,62 @@ def _has_nested_functions(node: ast.AST) -> bool:
         )
     return False
 
+def _check_undefined_type_hints(tree: ast.AST) -> List[str]:
+    """Check for undefined type hints in the AST.
+    
+    Args:
+        tree: AST to check
+        
+    Returns:
+        List of error messages for undefined type hints
+    """
+    issues = []
+    defined_names = set()
+    
+    # First pass: collect all defined names
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for name in node.names:
+                defined_names.add(name.name)
+                if name.asname:
+                    defined_names.add(name.asname)
+        elif isinstance(node, ast.ImportFrom):
+            for name in node.names:
+                defined_names.add(name.name)
+                if name.asname:
+                    defined_names.add(name.asname)
+        elif isinstance(node, ast.Name):
+            if isinstance(node.ctx, ast.Store):
+                defined_names.add(node.id)
+    
+    # Second pass: check annotations for undefined names
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.annotation, ast.Name):
+            if node.annotation.id not in defined_names and node.annotation.id not in __builtins__:
+                issues.append(f"Undefined type hint: {node.annotation.id}")
+        elif isinstance(node, ast.FunctionDef):
+            # Check return annotation
+            if node.returns and isinstance(node.returns, ast.Name):
+                if node.returns.id not in defined_names and node.returns.id not in __builtins__:
+                    issues.append(f"Undefined return type hint: {node.returns.id}")
+            elif node.returns and isinstance(node.returns, ast.Subscript):
+                if isinstance(node.returns.value, ast.Name):
+                    if node.returns.value.id not in defined_names and node.returns.value.id not in __builtins__:
+                        issues.append(f"Undefined type hint: {node.returns.value.id}")
+            
+            # Check argument annotations
+            for arg in node.args.args:
+                if arg.annotation:
+                    if isinstance(arg.annotation, ast.Name):
+                        if arg.annotation.id not in defined_names and arg.annotation.id not in __builtins__:
+                            issues.append(f"Undefined parameter type hint: {arg.annotation.id}")
+                    elif isinstance(arg.annotation, ast.Subscript):
+                        if isinstance(arg.annotation.value, ast.Name):
+                            if arg.annotation.value.id not in defined_names and arg.annotation.value.id not in __builtins__:
+                                issues.append(f"Undefined type hint: {arg.annotation.value.id}")
+    
+    return issues
+
 def validate_python_code(
     code: str,
     requirements: Dict[str, Any]
@@ -159,6 +215,11 @@ def validate_python_code(
                     if _has_nested_functions(func_def):
                         issues.append("Code contains nested function definitions")
                         break
+    
+    # Check for undefined type hints
+    type_hint_issues = _check_undefined_type_hints(tree)
+    if type_hint_issues:
+        issues.extend(type_hint_issues)
     
     logger.debug("Validation complete", extra={
         'payload': {

@@ -4,12 +4,12 @@ import ast
 from typing import Dict, Any, List, Optional
 from ..models.models import FunctionInterface
 
-def verify_interface(generated_code: Dict[str, Any], interface: FunctionInterface) -> List[str]:
+def verify_interface(interface: FunctionInterface, generated_code: Dict[str, Any]) -> List[str]:
     """Verify that generated code matches the interface specification.
     
     Args:
-        generated_code: Generated code response with validation results
         interface: Interface specification to verify against
+        generated_code: Generated code response with validation results
         
     Returns:
         List of validation errors, empty if valid
@@ -21,53 +21,28 @@ def verify_interface(generated_code: Dict[str, Any], interface: FunctionInterfac
         errors.append("Generated code missing 'code' field")
         return errors
         
-    # Check validation results exist
-    if 'validation_results' not in generated_code:
-        errors.append("Generated code missing 'validation_results' field")
+    # Check function info exists
+    if 'function_info' not in generated_code:
+        errors.append("Generated code missing 'function_info' field")
         return errors
         
-    # Check outputs exist
-    if 'outputs' not in generated_code:
-        errors.append("Generated code missing 'outputs' field")
-        return errors
-        
-    # Check validation results
-    validation_results = generated_code['validation_results']
-    if not validation_results.get('syntax_valid', False):
-        errors.append("Generated code has syntax errors")
-        
-    if validation_results.get('security_issues', []):
-        errors.extend(validation_results['security_issues'])
-        
-    # Check outputs match interface
-    outputs = generated_code['outputs']
-    for output_name, output_info in interface.outputs.items():
-        if output_name not in outputs:
-            errors.append(f"Missing required output '{output_name}'")
-            continue
-            
-        output_def = outputs[output_name]
-        if 'type' not in output_def:
-            errors.append(f"Output '{output_name}' missing type definition")
-            continue
-            
-        if output_def['type'] != output_info.type:
-            errors.append(
-                f"Output '{output_name}' type mismatch: "
-                f"expected {output_info.type}, got {output_def['type']}"
-            )
-            
-        if 'reference' not in output_def:
-            errors.append(f"Output '{output_name}' missing reference")
-            continue
-            
-        # Validate reference format
-        ref = output_def['reference']
-        if not ref.startswith('$') or '.' not in ref:
-            errors.append(
-                f"Output '{output_name}' has invalid reference format: {ref}. "
-                "Must be in format $stepname.outputname"
-            )
+    # Get function info
+    function_info = generated_code['function_info']
+    
+    # Check function name matches
+    if function_info['name'] != interface.function_name:
+        errors.append(f"Function name mismatch: expected {interface.function_name}, got {function_info['name']}")
+    
+    # Check parameters match
+    interface_params = {p.name: p.type for p in interface.parameters}
+    generated_params = {p['name']: p['type'] for p in function_info['parameters']}
+    
+    if interface_params != generated_params:
+        errors.append(f"Parameter mismatch: expected {interface_params}, got {generated_params}")
+    
+    # Check return type matches
+    if function_info['return_type'] != interface.return_type:
+        errors.append(f"Return type mismatch: expected {interface.return_type}, got {function_info['return_type']}")
     
     return errors
 

@@ -56,10 +56,11 @@ class CodeExecutionError(EvoliaError):
 
 class SecurityViolationError(EvoliaError):
     """Security violation detected"""
-    def __init__(self, message: str, violations: list = None, code: str = None):
+    def __init__(self, message: str, code: str = None, details: Dict[str, Any] = None):
         super().__init__(message)
-        self.violations = violations or []
         self.code = code
+        self.details = details or {}
+        self.violations = self.details.get('violations', {})
 
 class ValidationConfigError(EvoliaError):
     """Error in validation configuration"""

@@ -1,7 +1,7 @@
 """Network logging functionality"""
 import requests
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from urllib.parse import urlparse
 from contextlib import contextmanager
 
@@ -19,6 +19,83 @@ def network_request_context(method: str, url: str):
     except Exception as e:
         logger.error(f"Request failed: {method} {url}", exc_info=True)
         raise
+
+class RequestsClient:
+    """HTTP client with rate limiting and domain validation."""
+    
+    def __init__(self, rate_limit: int = 10, rate_window: int = 60, domain_whitelist: Optional[List[str]] = None):
+        """Initialize the client.
+        
+        Args:
+            rate_limit: Maximum number of requests per window
+            rate_window: Time window in seconds
+            domain_whitelist: List of allowed domains
+        """
+        self.session = requests.Session()
+        self.rate_limit = rate_limit
+        self.rate_window = rate_window
+        self.domain_whitelist = domain_whitelist or []
+        self.calls = []
+        
+        logger.debug(f"Rate limiting enabled: {self.rate_limit} calls per {self.rate_window}s")
+        if self.domain_whitelist:
+            logger.debug(f"Domain whitelist: {self.domain_whitelist}")
+    
+    def _check_rate_limit(self):
+        """Check if rate limit has been exceeded."""
+        now = time.time()
+        self.calls = [t for t in self.calls if now - t < self.rate_window]
+        
+        if len(self.calls) >= self.rate_limit:
+            logger.error(f"Rate limit exceeded: {self.rate_limit} calls per {self.rate_window}s")
+            raise Exception("Rate limit exceeded")
+        
+        self.calls.append(now)
+    
+    def _check_domain(self, url: str):
+        """Check if domain is allowed."""
+        if not self.domain_whitelist:
+            return
+        
+        domain = urlparse(url).netloc
+        if domain not in self.domain_whitelist:
+            logger.error(f"Domain not allowed: {domain}")
+            raise PermissionError(f"Domain {domain} not allowed")
+    
+    def request(self, method: str, url: str, **kwargs):
+        """Make an HTTP request."""
+        with network_request_context(method, url):
+            self._check_domain(url)
+            self._check_rate_limit()
+            return self.session.request(method, url, **kwargs)
+    
+    def get(self, url: str, **kwargs):
+        """Make a GET request."""
+        return self.request('GET', url, **kwargs)
+    
+    def post(self, url: str, **kwargs):
+        """Make a POST request."""
+        return self.request('POST', url, **kwargs)
+    
+    def put(self, url: str, **kwargs):
+        """Make a PUT request."""
+        return self.request('PUT', url, **kwargs)
+    
+    def delete(self, url: str, **kwargs):
+        """Make a DELETE request."""
+        return self.request('DELETE', url, **kwargs)
+    
+    def patch(self, url: str, **kwargs):
+        """Make a PATCH request."""
+        return self.request('PATCH', url, **kwargs)
+    
+    def head(self, url: str, **kwargs):
+        """Make a HEAD request."""
+        return self.request('HEAD', url, **kwargs)
+    
+    def options(self, url: str, **kwargs):
+        """Make an OPTIONS request."""
+        return self.request('OPTIONS', url, **kwargs)
 
 class LoggedRequests:
     """Wrapper around requests library that adds logging and security controls"""
