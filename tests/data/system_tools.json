@@ -1,0 +1,40 @@
+[
+    {
+        "name": "test_tool",
+        "version": "1.0.0",
+        "description": "A test tool for unit testing",
+        "inputs": {
+            "x": {
+                "type": "int",
+                "description": "First number"
+            },
+            "y": {
+                "type": "int",
+                "description": "Second number"
+            }
+        },
+        "outputs": {
+            "result": {
+                "type": "int",
+                "description": "Sum of inputs"
+            }
+        },
+        "interface": {
+            "function_name": "test_function",
+            "parameters": [
+                {
+                    "name": "x",
+                    "type": "int",
+                    "description": "First number"
+                },
+                {
+                    "name": "y",
+                    "type": "int",
+                    "description": "Second number"
+                }
+            ],
+            "return_type": "int",
+            "description": "A test function that adds two numbers"
+        }
+    }
+]

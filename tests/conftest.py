@@ -31,4 +31,30 @@ def clean_environment(tmp_path):
     if Path("run_artifacts").exists():
         import shutil
         shutil.rmtree("run_artifacts")
+
+@pytest.fixture
+def mock_openai_config():
+    """Test configuration for OpenAI with mock API key"""
+    return {
+        "api_key": "test-key",
+        "model": "gpt-4o-2024-08-06",
+        "temperature": 0.5,
+        "max_tokens": 100,
+        "top_p": 1.0,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0,
+        "allowed_modules": ["math", "typing"],
+        "allowed_builtins": ["len", "str", "int", "float"]
+    }
+
+@pytest.fixture
+def mock_openai_client(monkeypatch):
+    """Mock OpenAI client for testing"""
+    from unittest.mock import Mock
+    mock_client = Mock()
+    mock_client.chat.completions.create.return_value = Mock(
+        choices=[Mock(message=Mock(content="Test response", function_call=None))]
+    )
+    monkeypatch.setattr("openai.OpenAI", lambda **kwargs: mock_client)
+    return mock_client
   

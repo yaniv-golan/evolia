@@ -30,6 +30,17 @@ class Parameter:
     type: str
     description: str = ""
     
+    def __post_init__(self):
+        """Validate parameter fields."""
+        if not self.name:
+            raise ValueError("Parameter name is required")
+        if not self.type:
+            raise ValueError("Parameter type is required")
+        if not is_valid_identifier(self.name):
+            raise ValueError(f"Invalid parameter name: {self.name}")
+        if self.type not in ALLOWED_TYPES:
+            raise ValueError(f"Invalid parameter type: {self.type}")
+    
     # Valid Python types that can be used in parameters and outputs
     valid_types = {
         "str", "int", "float", "bool", "list", "dict", "set", "tuple",
@@ -198,6 +209,17 @@ class ValidationResults:
     """Validation results."""
     syntax_valid: bool
     security_issues: List[str]
+    name_matches: bool = False
+    type_matches: bool = False
+    params_match: bool = False
+    validation_errors: List[str] = field(default_factory=list)
+    
+    def __post_init__(self):
+        """Validate results fields."""
+        if not isinstance(self.syntax_valid, bool):
+            raise ValueError("syntax_valid must be a boolean")
+        if not isinstance(self.security_issues, list):
+            raise ValueError("security_issues must be a list")
 
 @dataclass
 class GeneratedCode:
@@ -209,7 +231,26 @@ class GeneratedCode:
 @dataclass
 class FunctionInterface:
     """Function interface specification."""
-    outputs: Dict[str, OutputDefinition]
+    function_name: str
+    parameters: List[Parameter]
+    return_type: str
+    description: str
+    examples: List[str] = field(default_factory=list)
+    constraints: List[str] = field(default_factory=list)
+    outputs: Dict[str, OutputDefinition] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Validate interface fields."""
+        if not self.function_name:
+            raise ValueError("Function name is required")
+        if not is_valid_identifier(self.function_name):
+            raise ValueError(f"Invalid function name: {self.function_name}")
+        if not self.return_type:
+            raise ValueError("Return type is required")
+        if self.return_type not in ALLOWED_TYPES:
+            raise ValueError(f"Invalid return type: {self.return_type}")
+        if not self.description:
+            raise ValueError("Description is required")
 
 @dataclass
 class Plan:
@@ -297,7 +338,11 @@ class TestFailure:
     test_name: str
     expected: Any
     actual: Any
-    message: str
+    message: str = ""
+    
+    def __str__(self) -> str:
+        """String representation of test failure."""
+        return f"{self.test_name}: {self.message}\nExpected: {self.expected}\nActual: {self.actual}"
 
 @dataclass
 class TestResults:

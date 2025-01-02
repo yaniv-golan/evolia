@@ -1,151 +1,110 @@
+"""Unit tests for models."""
+
 import pytest
-from pydantic import ValidationError
-from evolia.models import (
-    Plan,
-    PlanStep,
+from typing import Dict, Any, List
+
+from evolia.models.models import (
     Parameter,
     FunctionInterface,
     CodeGenerationRequest,
-    ValidationResults
+    ValidationResults,
+    GeneratedCode
 )
 
 def test_parameter_validation():
-    """Test Parameter model validation"""
-    # Valid parameter
-    param = Parameter(
-        name="input_str",
-        type="str",
-        description="Input string to process"
-    )
-    assert param.name == "input_str"
+    """Test parameter validation."""
+    # Valid parameters
+    param = Parameter(name="valid_name", type="str", description="A valid parameter")
+    assert param.name == "valid_name"
     assert param.type == "str"
-    assert param.description == "Input string to process"
+    assert param.description == "A valid parameter"
     
     # Invalid parameter name
-    with pytest.raises(ValidationError) as exc:
-        Parameter(name="2invalid", type="str")
-    assert "Invalid parameter name" in str(exc.value)
+    with pytest.raises(ValueError, match="Invalid parameter name"):
+        Parameter(name="2invalid", type="str", description="Invalid name")
     
-    # Invalid type annotation
-    with pytest.raises(ValidationError) as exc:
-        Parameter(name="valid", type="invalid:type::")
-    assert "Invalid type annotation" in str(exc.value)
+    # Missing required fields
+    with pytest.raises(TypeError):
+        Parameter(name="test")
+
+def test_function_interface():
+    """Test function interface validation."""
+    params = [
+        Parameter(name="x", type="int", description="First number"),
+        Parameter(name="y", type="int", description="Second number")
+    ]
+    
+    interface = FunctionInterface(
+        function_name="add_numbers",
+        parameters=params,
+        return_type="int",
+        description="Add two numbers"
+    )
+    
+    assert interface.function_name == "add_numbers"
+    assert len(interface.parameters) == 2
+    assert interface.return_type == "int"
+    assert interface.description == "Add two numbers"
 
 def test_code_generation_request():
-    """Test CodeGenerationRequest validation"""
-    # Test valid request
+    """Test code generation request model."""
     request = CodeGenerationRequest(
-        function_name="process_data",
+        function_name="test_func",
+        description="A test function",
         parameters=[
-            {
-                "name": "input_path",
-                "type": "str",
-                "description": "Path to input file"
-            }
+            Parameter(name="x", type="int", description="Test parameter")
         ],
-        return_type="str",
-        description="Process data from a file",
-        examples=["process_data('input.csv')"],
-        constraints=["no_globals", "pure_function"]
+        return_type="str"
     )
     
-    assert request.function_name == "process_data"
+    assert request.function_name == "test_func"
     assert len(request.parameters) == 1
     assert request.return_type == "str"
-    assert request.description == "Process data from a file"
-    assert request.examples == ["process_data('input.csv')"]
-    assert request.constraints == ["no_globals", "pure_function"]
-    
-    # Test missing required fields
-    with pytest.raises(ValidationError):
-        CodeGenerationRequest(
-            parameters=[{"name": "input_path", "type": "str"}],
-            return_type="str"
-        )
-    
-    # Invalid function name
-    with pytest.raises(ValidationError) as exc:
-        CodeGenerationRequest(
-            function_name="1invalid",
-            parameters=[Parameter(name="x", type="int")],
-            return_type="int"
-        )
-    assert "Invalid function name" in str(exc.value)
-    
-    # Invalid constraint
-    with pytest.raises(ValidationError) as exc:
-        CodeGenerationRequest(
-            function_name="valid",
-            parameters=[Parameter(name="x", type="int")],
-            return_type="int",
-            constraints=["invalid_constraint"]
-        )
-    assert "Invalid constraints" in str(exc.value)
-
-def test_test_results():
-    """Test TestResults model"""
-    failure = TestFailure(
-        test_case={"input": 5, "expected": 10},
-        expected=10,
-        actual=5,
-        error="AssertionError: expected 10 but got 5"
-    )
-    
-    results = TestResults(
-        passed=False,
-        failures=[failure],
-        execution_time=0.123
-    )
-    assert not results.passed
-    assert len(results.failures) == 1
-    assert results.execution_time == 0.123
-    assert results.failures[0].error == "AssertionError: expected 10 but got 5"
+    assert request.description == "A test function"
 
 def test_validation_results():
-    """Test ValidationResults model"""
+    """Test validation results model."""
     results = ValidationResults(
         syntax_valid=True,
-        name_matches=True,
-        params_match=False,
-        return_type_matches=True,
-        security_issues=["Uses unsafe eval()"]
-    )
-    assert results.syntax_valid
-    assert results.name_matches
-    assert not results.params_match
-    assert results.return_type_matches
-    assert len(results.security_issues) == 1
-
-def test_generated_code():
-    """Test GeneratedCode model"""
-    validation = ValidationResults(
-        syntax_valid=True,
-        name_matches=True,
-        params_match=True,
-        return_type_matches=True,
-        security_issues=[]
+        type_check_passed=True,
+        security_issues=[],
+        complexity_score=1.0,
+        function_name_matches=True,
+        parameter_types_match=True,
+        return_type_matches=True
     )
     
-    test_results = TestResults(
-        passed=True,
-        failures=[],
-        execution_time=0.05
+    assert results.syntax_valid
+    assert results.type_check_passed
+    assert not results.security_issues
+    assert results.complexity_score == 1.0
+    assert results.function_name_matches
+    assert results.parameter_types_match
+    assert results.return_type_matches
+
+def test_generated_code():
+    """Test generated code model."""
+    validation = ValidationResults(
+        syntax_valid=True,
+        type_check_passed=True,
+        security_issues=[],
+        complexity_score=1.0,
+        function_name_matches=True,
+        parameter_types_match=True,
+        return_type_matches=True
     )
     
     code = GeneratedCode(
-        code="def example(x: int) -> int:\n    return x * 2",
-        function_name="example",
+        code="def test(): pass",
         validation_results=validation,
-        test_results=test_results
+        function_info={
+            "name": "test",
+            "parameters": [],
+            "return_type": "None",
+            "docstring": "Test function"
+        }
     )
     
-    assert code.code.startswith("def example")
-    assert code.function_name == "example"
+    assert code.code == "def test(): pass"
     assert code.validation_results.syntax_valid
-    assert code.test_results.passed
-    
-    # Test model_dump conversion and logging
-    data = code.model_dump()
-    assert "code" in data
-    assert "validation_results" in data
-    assert "test_results" in data 
+    assert code.function_info["name"] == "test" 

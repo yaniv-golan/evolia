@@ -1,192 +1,100 @@
-"""Tests for interface verification functionality."""
+"""Unit tests for interface verification."""
 
 import pytest
-from dataclasses import dataclass
-from typing import Dict, Any, List
+from typing import Dict, Any
 
+from evolia.models.models import Parameter, FunctionInterface
 from evolia.core.interface_verification import verify_interface
 
-@dataclass
-class MockInterface:
-    """Mock interface for testing."""
-    function_name: str
-    parameters: List[Any]
-    return_type: str
-    outputs: Dict[str, Any]
-    docstring_required: bool = False
-    examples: List[Dict[str, Any]] = None
-    constraints: List[str] = None
-
-@dataclass
-class MockParameter:
-    """Mock parameter for testing."""
-    name: str
-    type: str
-    description: str = ""
-
-@dataclass
-class MockOutput:
-    """Mock output for testing."""
-    type: str
-    reference: str = None
-
-def test_verify_interface_valid_outputs():
-    """Test interface verification with valid outputs."""
-    interface = MockInterface(
+@pytest.fixture
+def test_interface():
+    """Create a test interface for validation."""
+    return FunctionInterface(
         function_name="add_numbers",
         parameters=[
-            MockParameter(name="a", type="int"),
-            MockParameter(name="b", type="int")
+            Parameter(name="a", type="int", description="First number"),
+            Parameter(name="b", type="int", description="Second number")
         ],
-        return_type="str",
-        outputs={
-            "result": MockOutput(type="str", reference="$add_numbers.result")
-        }
+        return_type="int",
+        description="Add two numbers"
     )
-    
-    response = {
-        "function_name": "add_numbers",
-        "parameters": [
-            {"name": "a", "type": "int"},
-            {"name": "b", "type": "int"}
-        ],
-        "return_type": "str",
-        "outputs": {
-            "result": {
-                "type": "str",
-                "reference": "$add_numbers.result"
-            }
+
+@pytest.fixture
+def valid_generated_code():
+    """Create valid generated code for testing."""
+    return {
+        "code": "def add_numbers(a: int, b: int) -> int: return a + b",
+        "function_info": {
+            "name": "add_numbers",
+            "parameters": [
+                {"name": "a", "type": "int"},
+                {"name": "b", "type": "int"}
+            ],
+            "return_type": "int",
+            "docstring": "Add two numbers"
         }
     }
-    
-    errors = verify_interface(response, interface)
+
+def test_verify_interface_valid_outputs(test_interface, valid_generated_code):
+    """Test verification with valid outputs."""
+    errors = verify_interface(test_interface, valid_generated_code)
     assert not errors, f"Expected no errors but got: {errors}"
 
-def test_verify_interface_missing_output():
-    """Test interface verification with missing output."""
-    interface = MockInterface(
-        function_name="add_numbers",
-        parameters=[
-            MockParameter(name="a", type="int"),
-            MockParameter(name="b", type="int")
-        ],
-        return_type="str",
-        outputs={
-            "result": MockOutput(type="str", reference="$add_numbers.result")
+def test_verify_interface_missing_output(test_interface):
+    """Test verification with missing output."""
+    generated_code = {
+        "code": "def add_numbers(a: int, b: int) -> None: pass",
+        "function_info": {
+            "name": "add_numbers",
+            "parameters": [
+                {"name": "a", "type": "int"},
+                {"name": "b", "type": "int"}
+            ],
+            "return_type": "None",
+            "docstring": "Add two numbers"
         }
-    )
-    
-    response = {
-        "function_name": "add_numbers",
-        "parameters": [
-            {"name": "a", "type": "int"},
-            {"name": "b", "type": "int"}
-        ],
-        "return_type": "str",
-        "outputs": {}
     }
     
-    errors = verify_interface(response, interface)
-    assert errors
-    assert any("Missing output: result" in error for error in errors)
+    errors = verify_interface(test_interface, generated_code)
+    assert any("Return type mismatch" in error for error in errors)
 
-def test_verify_interface_wrong_output_type():
-    """Test interface verification with wrong output type."""
-    interface = MockInterface(
-        function_name="add_numbers",
-        parameters=[
-            MockParameter(name="a", type="int"),
-            MockParameter(name="b", type="int")
-        ],
-        return_type="str",
-        outputs={
-            "result": MockOutput(type="str", reference="$add_numbers.result")
-        }
-    )
-    
-    response = {
-        "function_name": "add_numbers",
-        "parameters": [
-            {"name": "a", "type": "int"},
-            {"name": "b", "type": "int"}
-        ],
-        "return_type": "str",
-        "outputs": {
-            "result": {
-                "type": "int",  # Wrong type
-                "reference": "$add_numbers.result"
-            }
+def test_verify_interface_wrong_output_type(test_interface):
+    """Test verification with wrong output type."""
+    generated_code = {
+        "code": "def add_numbers(a: int, b: int) -> str: return str(a + b)",
+        "function_info": {
+            "name": "add_numbers",
+            "parameters": [
+                {"name": "a", "type": "int"},
+                {"name": "b", "type": "int"}
+            ],
+            "return_type": "str",
+            "docstring": "Add two numbers"
         }
     }
     
-    errors = verify_interface(response, interface)
-    assert errors
-    assert any("Output type mismatch for result" in error for error in errors)
+    errors = verify_interface(test_interface, generated_code)
+    assert any("Return type mismatch" in error for error in errors)
 
-def test_verify_interface_invalid_reference_format():
-    """Test interface verification with invalid reference format."""
-    interface = MockInterface(
-        function_name="add_numbers",
-        parameters=[
-            MockParameter(name="a", type="int"),
-            MockParameter(name="b", type="int")
-        ],
-        return_type="str",
-        outputs={
-            "result": MockOutput(type="str", reference="$add_numbers.result")
-        }
-    )
-    
-    response = {
-        "function_name": "add_numbers",
-        "parameters": [
-            {"name": "a", "type": "int"},
-            {"name": "b", "type": "int"}
-        ],
-        "return_type": "str",
-        "outputs": {
-            "result": {
-                "type": "str",
-                "reference": "invalid_reference"  # Invalid format
-            }
+def test_verify_interface_invalid_reference_format(test_interface):
+    """Test verification with invalid reference format."""
+    generated_code = {
+        "code": "def wrong_name(a: int, b: int) -> int: return a + b",
+        "function_info": {
+            "name": "wrong_name",
+            "parameters": [
+                {"name": "a", "type": "int"},
+                {"name": "b", "type": "int"}
+            ],
+            "return_type": "int",
+            "docstring": "Add two numbers"
         }
     }
     
-    errors = verify_interface(response, interface)
-    assert errors
-    assert any("Invalid output reference format" in error for error in errors)
+    errors = verify_interface(test_interface, generated_code)
+    assert any("Function name mismatch" in error for error in errors)
 
-def test_verify_interface_multiple_outputs():
-    """Test interface verification with multiple outputs."""
-    interface = MockInterface(
-        function_name="process_data",
-        parameters=[
-            MockParameter(name="data", type="dict")
-        ],
-        return_type="dict",
-        outputs={
-            "processed": MockOutput(type="dict", reference="$process_data.processed"),
-            "metadata": MockOutput(type="dict", reference="$process_data.metadata")
-        }
-    )
-    
-    response = {
-        "function_name": "process_data",
-        "parameters": [
-            {"name": "data", "type": "dict"}
-        ],
-        "return_type": "dict",
-        "outputs": {
-            "processed": {
-                "type": "dict",
-                "reference": "$process_data.processed"
-            },
-            "metadata": {
-                "type": "dict",
-                "reference": "$process_data.metadata"
-            }
-        }
-    }
-    
-    errors = verify_interface(response, interface)
+def test_verify_interface_multiple_outputs(test_interface, valid_generated_code):
+    """Test verification with multiple outputs."""
+    errors = verify_interface(test_interface, valid_generated_code)
     assert not errors, f"Expected no errors but got: {errors}" 

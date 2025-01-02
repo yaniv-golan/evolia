@@ -156,8 +156,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
                 prompt_template=self.fix_template,
                 template_vars=template_vars,
                 schema=self.fix_schema,
-                system_prompt=FIX_SYSTEM_PROMPT,
-                temperature=self.config.fix_temperature
+                system_prompt=FIX_SYSTEM_PROMPT
             )
             
             # Add to fix history

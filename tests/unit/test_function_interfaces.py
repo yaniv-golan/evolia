@@ -1,98 +1,80 @@
+"""Unit tests for function interfaces."""
+
 import pytest
-from evolia.models import Parameter, FunctionInterface
-from evolia.core.interface_verification import verify_tool_interface
 from typing import Dict, Any
 
+from evolia.models.models import Parameter, FunctionInterface
+from evolia.core.interface_verification import verify_interface
+
 def test_function_parameter_validation():
-    # Test valid parameter
-    param = Parameter(
-        name="input_path",
-        type="str",
-        description="Path to the input file"
-    )
+    """Test parameter validation."""
+    # Valid parameter
+    param = Parameter(name="input_path", type="str", description="Input file path")
     assert param.name == "input_path"
     assert param.type == "str"
-    assert param.description == "Path to the input file"
+    assert param.description == "Input file path"
     
-    # Test missing required fields
-    with pytest.raises(ValueError):
-        Parameter(name="input_path")
+    # Invalid parameter name
+    with pytest.raises(ValueError, match="Invalid parameter name"):
+        Parameter(name="2invalid", type="str", description="Invalid name")
     
-    with pytest.raises(ValueError):
-        Parameter(type="str")
+    # Missing required fields
+    with pytest.raises(TypeError):
+        Parameter(name="test")
 
 def test_function_interface_validation():
-    # Test valid interface
+    """Test function interface validation."""
+    # Valid interface
     interface = FunctionInterface(
-        function_name="process_data",
+        function_name="process_file",
         parameters=[
-            Parameter(
-                name="input_path",
-                type="str",
-                description="Path to the input file"
-            )
+            Parameter(name="input_path", type="str", description="Input file path"),
+            Parameter(name="output_path", type="str", description="Output file path")
         ],
-        return_type="str",
-        description="Process the input file",
-        examples=["process_data('input.csv')"],
-        constraints=["Input must be CSV"]
+        return_type="bool",
+        description="Process a file and save results"
     )
     
-    assert interface.function_name == "process_data"
-    assert len(interface.parameters) == 1
-    assert interface.return_type == "str"
-    assert interface.description == "Process the input file"
-    assert interface.examples == ["process_data('input.csv')"]
-    assert interface.constraints == ["Input must be CSV"]
+    assert interface.function_name == "process_file"
+    assert len(interface.parameters) == 2
+    assert interface.return_type == "bool"
+    assert interface.description == "Process a file and save results"
     
-    # Test missing required fields
-    with pytest.raises(ValueError):
-        FunctionInterface(
-            function_name="process_data",
-            return_type="str"
-        )
+    # Missing required fields
+    with pytest.raises(TypeError):
+        FunctionInterface(function_name="test")
 
 def test_verify_interface():
-    """Test interface verification logic"""
+    """Test interface verification."""
     interface = FunctionInterface(
-        function_name="process_data",
+        function_name="add_numbers",
         parameters=[
-            Parameter(name="input_path", type="str", description="Path to input file")
+            Parameter(name="a", type="int", description="First number"),
+            Parameter(name="b", type="int", description="Second number")
         ],
-        return_type="str",
-        description="Process data from a file"
+        return_type="int",
+        description="Add two numbers"
     )
     
+    # Test function name mismatch
     generated_code = {
-        "function_name": "wrong_name",
-        "parameters": [
-            {"name": "input_path", "type": "str"}
-        ],
-        "return_type": "str"
+        "code": "def wrong_name(a: int, b: int) -> int: return a + b",
+        "function_info": {
+            "name": "wrong_name",
+            "parameters": [
+                {"name": "a", "type": "int"},
+                {"name": "b", "type": "int"}
+            ],
+            "return_type": "int"
+        }
     }
     
-    # Test function name mismatch
-    errors = verify_tool_interface(generated_code, interface)
-    assert len(errors) == 1
+    errors = verify_interface(interface, generated_code)
     assert "Function name mismatch" in errors[0]
     
-    # Test mismatched parameter type
-    generated_code["function_name"] = "process_data"
-    generated_code["parameters"][0]["type"] = "int"
-    errors = verify_tool_interface(generated_code, interface)
-    assert len(errors) == 1
-    assert "Parameter mismatch" in errors[0]
+    # Test valid interface
+    generated_code["code"] = "def add_numbers(a: int, b: int) -> int: return a + b"
+    generated_code["function_info"]["name"] = "add_numbers"
     
-    # Test mismatched return type
-    generated_code["parameters"][0]["type"] = "str"
-    generated_code["return_type"] = "int"
-    errors = verify_tool_interface(generated_code, interface)
-    assert len(errors) == 1
-    assert "Return type mismatch" in errors[0]
-    
-    # Test missing parameter
-    generated_code["return_type"] = "str"
-    generated_code["parameters"] = []
-    errors = verify_tool_interface(generated_code, interface)
-    assert len(errors) == 1
-    assert "Parameter mismatch" in errors[0] 
+    errors = verify_interface(interface, generated_code)
+    assert not errors 

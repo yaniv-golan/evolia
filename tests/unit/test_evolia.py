@@ -12,8 +12,7 @@ from evolia.core.evolia import (
     PlanValidationError,
     PlanExecutionError,
     load_config,
-    load_system_tools,
-    prompt_for_promotion
+    load_system_tools
 )
 from evolia.models import Plan, PlanStep, SystemTool
 from evolia.utils.exceptions import CodeExecutionError
