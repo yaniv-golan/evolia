@@ -157,6 +157,8 @@ python_generation:
     
     Write a Python function with these requirements:
 
+    Description: {description}
+
     Function Name: {function_name}
     Parameters:
     {parameters}
