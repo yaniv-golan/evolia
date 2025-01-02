@@ -346,7 +346,8 @@ class Executor2:
         self.generated_files = []
         
         # Get allowed modules from config
-        self.allowed_modules = set(config.get('allowed_modules', {}).keys())
+        allowed_modules_cfg = config.get('allowed_modules', {})
+        self.allowed_modules = set(allowed_modules_cfg.keys() if isinstance(allowed_modules_cfg, dict) else allowed_modules_cfg)
         
         # Get OpenAI API key
         openai_cfg = config.get('openai', {})
