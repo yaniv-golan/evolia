@@ -139,8 +139,11 @@ def test_generate_plan(mock_config, mock_args, is_github_actions):
         assert plan.steps[0].tool == "test_tool"
 
 
-def test_generate_plan_error(mock_config, mock_args):
+def test_generate_plan_error(mock_config, mock_args, is_github_actions):
     """Test error handling in plan generation."""
+    if is_github_actions:
+        pytest.skip("Skipping OpenAI-dependent test in GitHub Actions")
+
     with patch(
         "evolia.core.evolia.call_openai_structured",
         side_effect=RuntimeError("API error"),

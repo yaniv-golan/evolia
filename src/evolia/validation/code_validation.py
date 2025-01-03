@@ -5,6 +5,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+import jsonschema
+from jsonschema.validators import validator_for
+
 logger = logging.getLogger("evolia")
 
 
@@ -42,9 +45,6 @@ def validate_schema(data: dict, schema_type: Any) -> Dict[str, Any]:
             schema = schema_type.schema()
         else:
             schema = schema_type
-
-        import jsonschema
-        from jsonschema.validators import validator_for
 
         # Create a validator that collects all errors
         validator = validator_for(schema)(schema)
