@@ -1,8 +1,9 @@
 """Integration tests for execution output handling and processing."""
-import pytest
 from unittest.mock import patch
 
-from evolia.core.code_generator import CodeGenerator, CodeGenerationConfig
+import pytest
+
+from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 from evolia.models import Parameter
 
 

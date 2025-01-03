@@ -1,13 +1,14 @@
 """Tests for plan interface validation."""
 import pytest
-from evolia.validation import validate_step_interface
+
 from evolia.models import (
+    FunctionInterface,
+    OutputDefinition,
     Parameter,
     PlanStep,
     SystemTool,
-    FunctionInterface,
-    OutputDefinition,
 )
+from evolia.validation import validate_step_interface
 
 
 @pytest.fixture

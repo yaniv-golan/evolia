@@ -1,16 +1,17 @@
 """Unit tests for security module."""
 
-import pytest
 import ast
-from typing import Dict, Any
+from typing import Any, Dict
+
+import pytest
 
 from evolia.security.security import (
-    SecurityVisitor,
     SecurityViolationError,
-    validate_security_checks,
+    SecurityVisitor,
     get_subprocess_policy,
-    validate_command,
     validate_code_security,
+    validate_command,
+    validate_security_checks,
 )
 
 

@@ -1,9 +1,10 @@
 """Unit tests for tool metadata."""
 
-import pytest
-from typing import Dict, Any
+from typing import Any, Dict
 
-from evolia.models.models import Parameter, FunctionInterface, SystemTool
+import pytest
+
+from evolia.models.models import FunctionInterface, Parameter, SystemTool
 
 
 @pytest.fixture

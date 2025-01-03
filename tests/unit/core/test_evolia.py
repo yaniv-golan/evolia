@@ -1,25 +1,26 @@
 """Tests for the Evolia core functionality"""
-import pytest
+import argparse
+import json
 import os
 from pathlib import Path
-import json
-from unittest.mock import patch, MagicMock
-import argparse
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from evolia.core.evolia import (
-    generate_plan,
-    execute_plan,
-    validate_plan,
-    PlanValidationError,
     PlanExecutionError,
     PlanGenerationError,
+    PlanValidationError,
+    execute_plan,
+    generate_plan,
     load_config,
     load_system_tools,
+    validate_plan,
 )
-from evolia.models import Plan, PlanStep, SystemTool, Parameter, OutputDefinition
-from evolia.utils.exceptions import CodeExecutionError
-from evolia.integrations.openai_structured import call_openai_structured
 from evolia.core.executor2 import Executor2
+from evolia.integrations.openai_structured import call_openai_structured
+from evolia.models import OutputDefinition, Parameter, Plan, PlanStep, SystemTool
+from evolia.utils.exceptions import CodeExecutionError
 
 
 @pytest.fixture

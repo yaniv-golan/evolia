@@ -1,6 +1,8 @@
 """Tests for tool promotion functionality."""
-import pytest
 from pathlib import Path
+
+import pytest
+
 from evolia.core.promotion import ToolPromoter
 
 

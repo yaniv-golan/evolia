@@ -1,15 +1,16 @@
 """Unit tests for restricted execution functionality."""
 
-import pytest
 import os
 from pathlib import Path
-from typing import Dict, Any, Set
+from typing import Any, Dict, Set
+
+import pytest
 
 from evolia.core.restricted_execution import (
-    RestrictedExecutor,
-    RestrictedExecutionError,
-    RestrictedImportError,
     RestrictedAttributeError,
+    RestrictedExecutionError,
+    RestrictedExecutor,
+    RestrictedImportError,
     guarded_getitem,
     restricted_import,
 )

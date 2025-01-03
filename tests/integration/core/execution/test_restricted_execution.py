@@ -1,19 +1,20 @@
 """Integration tests for restricted execution functionality."""
 
-import pytest
-import os
 import json
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from typing import Dict, Any
+import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Dict
+
+import numpy as np
+import pandas as pd
+import pytest
 
 from evolia.core.restricted_execution import (
-    RestrictedExecutor,
-    RestrictedExecutionError,
-    RestrictedImportError,
     RestrictedAttributeError,
+    RestrictedExecutionError,
+    RestrictedExecutor,
+    RestrictedImportError,
 )
 from evolia.utils.exceptions import SecurityViolationError
 

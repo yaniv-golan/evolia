@@ -1,6 +1,7 @@
 """Integration tests using live OpenAI API."""
 import pytest
-from evolia.core.code_generator import CodeGenerator, CodeGenerationConfig
+
+from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 from evolia.core.function_generator import FunctionGenerator
 from evolia.models.models import Parameter
 from evolia.utils.exceptions import CodeGenerationError

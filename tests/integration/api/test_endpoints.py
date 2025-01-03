@@ -1,9 +1,10 @@
+import json
 import os
 import time
-import json
-from dotenv import load_dotenv, find_dotenv
-import requests
+
 import pytest
+import requests
+from dotenv import find_dotenv, load_dotenv
 
 # Force reload environment variables
 load_dotenv(find_dotenv(), override=True)

@@ -1,21 +1,22 @@
 """Tests for logging functionality"""
-import pytest
+import json
 import logging
 import os
-import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from evolia.utils.logger import (
-    setup_logger,
-    LogConfig,
-    LogHandler,
-    LogFormatter,
     ColorFormatter,
+    LogConfig,
+    LogFormatter,
+    LogHandler,
     code_generation_context,
-    validation_context,
     execution_context,
+    setup_logger,
+    validation_context,
 )
 
 

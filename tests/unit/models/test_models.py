@@ -1,16 +1,17 @@
 """Unit tests for models."""
 
+from typing import Any, Dict, List
+
 import pytest
-from typing import Dict, Any, List
 
 from evolia.models.models import (
-    Parameter,
-    FunctionInterface,
     CodeGenerationRequest,
-    ValidationResults,
+    CodeGenerationResponse,
+    FunctionInterface,
     GeneratedCode,
     OutputDefinition,
-    CodeGenerationResponse,
+    Parameter,
+    ValidationResults,
 )
 
 

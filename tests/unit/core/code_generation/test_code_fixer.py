@@ -1,11 +1,12 @@
 """Unit tests for CodeFixer."""
 
-import pytest
-from unittest.mock import Mock, patch
 from datetime import datetime
+from unittest.mock import Mock, patch
 
-from evolia.core.code_fixer import CodeFixer, CodeFixConfig, FixAttempt, FixHistory
-from evolia.core.code_generator import CodeGenerator, CodeGenerationConfig
+import pytest
+
+from evolia.core.code_fixer import CodeFixConfig, CodeFixer, FixAttempt, FixHistory
+from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 
 
 @pytest.fixture

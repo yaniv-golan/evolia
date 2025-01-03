@@ -1,10 +1,11 @@
 """Tests for library management functionality"""
 import pytest
+
 from evolia.core.library_management import (
-    detect_missing_libraries,
-    validate_library_version,
-    get_library_dependencies,
     LibraryManager,
+    detect_missing_libraries,
+    get_library_dependencies,
+    validate_library_version,
 )
 
 

@@ -1,10 +1,11 @@
 """Integration tests for Evolia."""
-import pytest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from evolia.core.executor2 import Executor2
-from evolia.models import Plan, PlanStep, Parameter, OutputDefinition
+from evolia.models import OutputDefinition, Parameter, Plan, PlanStep
 
 
 @pytest.fixture

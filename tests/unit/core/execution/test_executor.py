@@ -1,13 +1,14 @@
 """Tests for Executor class."""
-import pytest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-import os
-import logging
 import json
+import logging
+import os
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from evolia.core.executor import Executor
-from evolia.models import Plan, PlanStep, Parameter, OutputDefinition
+from evolia.models import OutputDefinition, Parameter, Plan, PlanStep
 from evolia.utils.exceptions import ExecutorError
 
 # Enable debug logging

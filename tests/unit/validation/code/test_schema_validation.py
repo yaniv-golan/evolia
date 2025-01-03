@@ -1,6 +1,6 @@
 """Tests for schema validation functionality."""
 import pytest
-from evolia.validation.code_validation import validate_schema
+
 from evolia.models.schemas import (
     FunctionSchema,
     ParameterSchema,
@@ -8,6 +8,7 @@ from evolia.models.schemas import (
     ValidationResultSchema,
 )
 from evolia.utils.exceptions import ValidationError
+from evolia.validation.code_validation import validate_schema
 
 
 @pytest.fixture

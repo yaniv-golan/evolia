@@ -1,7 +1,8 @@
 """Unit tests for network functionality and rate limiting."""
-import pytest
 import time
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
+import pytest
 
 from evolia.utils.network_logging import RequestsClient
 

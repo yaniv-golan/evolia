@@ -1,9 +1,10 @@
 """Tests for function generator."""
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 from evolia.core.function_generator import FunctionGenerator
-from evolia.core.code_generator import CodeGenerator, CodeGenerationConfig
 from evolia.models import Parameter
 
 

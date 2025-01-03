@@ -1,15 +1,16 @@
 """Tests for plan validation functionality."""
 import pytest
-from evolia.validation import validate_plan
+
 from evolia.models import (
-    Parameter,
-    SystemTool,
     FunctionInterface,
     OutputDefinition,
+    Parameter,
     Plan,
     PlanStep,
+    SystemTool,
 )
 from evolia.utils.exceptions import PlanValidationError
+from evolia.validation import validate_plan
 
 
 @pytest.fixture

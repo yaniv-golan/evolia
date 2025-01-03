@@ -1,11 +1,13 @@
 """Integration tests for code generation output handling."""
-import pytest
 from unittest.mock import patch
-from evolia.core.code_generator import CodeGenerator, CodeGenerationConfig
+
+import pytest
+
+from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 from evolia.models import Parameter
 from evolia.utils.exceptions import (
-    CodeGenerationError,
     APIRateLimitError,
+    CodeGenerationError,
     TemplateError,
 )
 

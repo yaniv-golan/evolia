@@ -1,12 +1,13 @@
 """Unit tests for CodeGenerator."""
 
-import pytest
+from typing import Any, Dict
 from unittest.mock import Mock, patch
-from typing import Dict, Any
 
-from evolia.core.code_generator import CodeGenerator, CodeGenerationConfig
-from evolia.utils.exceptions import CodeGenerationError
+import pytest
+
+from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 from evolia.models.schemas import CODE_SCHEMA
+from evolia.utils.exceptions import CodeGenerationError
 
 
 @pytest.fixture

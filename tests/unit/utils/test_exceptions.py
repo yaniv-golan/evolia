@@ -1,20 +1,21 @@
 """Tests for custom exceptions"""
 import pytest
+
 from evolia.utils.exceptions import (
-    EvoliaError,
-    ExecutorError,
+    CodeExecutionError,
     CodeGenerationError,
     CodeValidationError,
-    PlanValidationError,
-    PlanExecutionError,
-    CodeExecutionError,
-    SecurityViolationError,
-    ValidationConfigError,
-    TestConfigError,
+    EvoliaError,
+    ExecutorError,
     FileAccessViolationError,
-    RuntimeFixError,
-    SyntaxFixError,
+    PlanExecutionError,
     PlanGenerationError,
+    PlanValidationError,
+    RuntimeFixError,
+    SecurityViolationError,
+    SyntaxFixError,
+    TestConfigError,
+    ValidationConfigError,
 )
 
 

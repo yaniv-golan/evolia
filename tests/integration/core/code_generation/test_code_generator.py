@@ -1,10 +1,12 @@
 """Integration tests for the code generator module."""
 
 import os
-import pytest
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 from unittest.mock import patch
-from evolia.core.code_generator import CodeGenerator, CodeGenerationConfig
+
+import pytest
+
+from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 from evolia.core.function_generator import FunctionGenerator
 from evolia.models.models import Parameter
 from evolia.utils.exceptions import CodeGenerationError

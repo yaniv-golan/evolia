@@ -1,10 +1,11 @@
 """Unit tests for function interfaces."""
 
-import pytest
-from typing import Dict, Any
+from typing import Any, Dict
 
-from evolia.models.models import Parameter, FunctionInterface
+import pytest
+
 from evolia.core.interface_verification import verify_interface
+from evolia.models.models import FunctionInterface, Parameter
 
 
 def test_function_parameter_validation():
