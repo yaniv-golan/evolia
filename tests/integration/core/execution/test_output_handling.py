@@ -23,12 +23,14 @@ def mock_responses():
             "function_name": "process_data",
             "parameters": [{"name": "data", "type": "list"}],
             "return_type": "dict",
+            "validation_results": {"syntax_valid": True, "security_issues": []},
         },
         "step2": {
             "code": "def analyze_result(result: dict) -> int:\n    return result['count']",
             "function_name": "analyze_result",
             "parameters": [{"name": "result", "type": "dict"}],
             "return_type": "int",
+            "validation_results": {"syntax_valid": True, "security_issues": []},
         },
     }
 
@@ -47,7 +49,7 @@ def test_basic_output_handling(code_generator, mock_responses):
         }
 
         response = code_generator.generate(
-            prompt_template="Generate a function to {description}",
+            prompt_template="Generate a function to {description} with parameters {parameters} that returns a {return_type}",
             template_vars=template_vars,
             schema={"type": "object", "properties": {}},
         )
@@ -71,7 +73,7 @@ def test_output_references(code_generator, mock_responses):
         }
 
         step1_response = code_generator.generate(
-            prompt_template="Generate a function to {description}",
+            prompt_template="Generate a function to {description} with parameters {parameters} that returns a {return_type}",
             template_vars=template_vars,
             schema={"type": "object", "properties": {}},
         )
@@ -87,7 +89,7 @@ def test_output_references(code_generator, mock_responses):
         }
 
         step2_response = code_generator.generate(
-            prompt_template="Generate a function to {description}",
+            prompt_template="Generate a function to {description} with parameters {parameters} that returns a {return_type}",
             template_vars=template_vars,
             schema={"type": "object", "properties": {}},
         )

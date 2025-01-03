@@ -28,8 +28,6 @@ from RestrictedPython import (
     safe_builtins,
 )
 
-logger = logging.getLogger("evolia")
-
 from ..models.models import (
     CodeGenerationRequest,
     CodeGenerationResponse,
@@ -79,7 +77,13 @@ from .interface_verification import (
     verify_constraint,
     verify_tool_interface,
 )
-from .restricted_execution import RestrictedExecutionError, RestrictedExecutor
+from .restricted_execution import (
+    RestrictedExecutionError,
+    RestrictedExecutor,
+    restricted_import,
+)
+
+logger = logging.getLogger("evolia")
 
 
 @contextmanager

@@ -102,6 +102,7 @@ ParameterSchema = {
         "description": {"type": "string"},
         "optional": {"type": "boolean"},
         "default": {"type": ["string", "number", "boolean", "null"]},
+        "schema": {"type": "object"},  # For nested types
     },
     "required": ["name", "type", "description"],
     "additionalProperties": False,

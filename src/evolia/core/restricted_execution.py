@@ -289,43 +289,102 @@ class RestrictedExecutor:
         return restricted_globals
 
     def execute_in_sandbox(
-        self, script: str, inputs: Dict[str, Any], output_dir: str
+        self,
+        script: str,
+        inputs: Dict[str, Any],
+        output_dir: str,
+        function_name: str = None,
     ) -> Any:
-        """Execute code in a restricted sandbox environment."""
+        """Execute code in a restricted sandbox environment.
+
+        Args:
+            script: The Python code to execute
+            inputs: Dictionary of input variables
+            output_dir: Directory for any output files
+            function_name: Name of the function to execute (if None, looks for 'main')
+
+        Returns:
+            Result of the function execution
+
+        Raises:
+            RestrictedExecutionError: If execution fails or security constraints are violated
+        """
         try:
             logger.info("Compiling code with RestrictedPython")
             byte_code = compile_restricted(script, filename="<string>", mode="exec")
 
+            # Get initial globals to compare against later
+            initial_globals = set(
+                self.prepare_restricted_globals(
+                    inputs=inputs,
+                    output_dir=output_dir,
+                    allowed_modules=self.allowed_modules,
+                ).keys()
+            )
+
             # Prepare restricted globals
-            restricted_globals = self.prepare_restricted_globals(inputs, output_dir)
+            restricted_globals = self.prepare_restricted_globals(
+                inputs=inputs,
+                output_dir=output_dir,
+                allowed_modules=self.allowed_modules,
+            )
 
             logger.info("Executing code in sandbox")
             exec(byte_code, restricted_globals)
 
-            logger.info("Calling main function")
-            if "main" not in restricted_globals:
-                raise RestrictedExecutionError(
-                    "No main function defined in script",
-                    script,
-                    {"error": "No main function found"},
-                )
+            # If no function name specified, look for main
+            target_function = function_name or "main"
 
-            result = restricted_globals["main"](inputs, output_dir)
+            logger.info(f"Calling function: {target_function}")
+            if target_function not in restricted_globals:
+                # Try to find any user-defined function
+                # Only consider functions that weren't in the initial globals
+                available_functions = [
+                    name
+                    for name, obj in restricted_globals.items()
+                    if callable(obj)
+                    and not name.startswith("_")
+                    and name not in initial_globals
+                ]
 
-            # Validate result type
-            if not isinstance(result, dict):
-                raise RestrictedExecutionError(
-                    "Main function must return a dictionary",
-                    script,
-                    {"error": "Invalid return type"},
-                )
-
-            # Validate result values
-            for key, value in result.items():
-                if not isinstance(value, (str, int, float, bool, list, dict, tuple)):
-                    raise SecurityViolationError(
-                        f"Result '{key}' has unsupported type: {type(value)}"
+                if available_functions:
+                    target_function = available_functions[0]
+                    logger.info(f"Using available function: {target_function}")
+                else:
+                    raise RestrictedExecutionError(
+                        f"No {target_function} function defined in script",
+                        script,
+                        {"error": f"Function {target_function} not found"},
                     )
+
+            # Call the function with appropriate arguments
+            func = restricted_globals[target_function]
+            if target_function == "main":
+                # Main function expects specific arguments
+                result = func(inputs, output_dir)
+
+                # Validate result type for main function
+                if not isinstance(result, dict):
+                    raise RestrictedExecutionError(
+                        "Main function must return a dictionary",
+                        script,
+                        {"error": "Invalid return type"},
+                    )
+
+                # Validate result values for main function
+                for key, value in result.items():
+                    if not isinstance(
+                        value, (str, int, float, bool, list, dict, tuple)
+                    ):
+                        raise SecurityViolationError(
+                            f"Result '{key}' has unsupported type: {type(value)}"
+                        )
+            else:
+                # For other functions, pass inputs as individual arguments
+                if isinstance(inputs, (list, tuple)):
+                    result = func(*inputs)
+                else:
+                    result = func(**inputs)
 
             return result
 

@@ -23,15 +23,6 @@ def system_tools():
         ],
         outputs={"result": OutputDefinition(type="str")},
         permissions={"read": [], "write": [], "create": []},
-        interface=FunctionInterface(
-            function_name="test_function",
-            parameters=[
-                Parameter(name="input1", type="str", description="First input"),
-                Parameter(name="input2", type="int", description="Second input"),
-            ],
-            return_type="str",
-            description="Test tool function",
-        ),
     )
     return {"test_tool": test_tool}
 

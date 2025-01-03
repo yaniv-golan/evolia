@@ -16,7 +16,7 @@ from evolia.utils.exceptions import (
 def code_generator():
     """Create a code generator for testing."""
     config = CodeGenerationConfig(
-        model="gpt-4", api_key="test-key", temperature=0.2, max_tokens=1000
+        model="gpt-4o-2024-08-06", api_key="test-key", temperature=0.2, max_tokens=1000
     )
     return CodeGenerator(config)
 
@@ -53,7 +53,7 @@ def test_successful_generation(code_generator, mock_responses):
         return_value=mock_responses["success"],
     ):
         response = code_generator.generate(
-            prompt_template="Generate a function to {description}",
+            prompt_template="Generate a function to {description} with parameters {parameters} that returns a {return_type}",
             template_vars={
                 "description": "Process input data",
                 "parameters": [
@@ -138,7 +138,7 @@ def test_invalid_type_output(code_generator, mock_responses):
     ):
         with pytest.raises(CodeGenerationError) as exc_info:
             code_generator.generate(
-                prompt_template="Generate a function",
+                prompt_template="Generate a function to {description} with parameters {parameters} that returns a {return_type}",
                 template_vars={
                     "description": "Process data",
                     "parameters": [
@@ -181,14 +181,24 @@ def test_template_validation(code_generator):
         ("Generate a function", {"unknown": "value"}, "unknown template variable"),
     ]
 
+    # Mock the OpenAI call to prevent actual API calls
+    mock_response = {
+        "code": "def test(): pass",
+        "validation_results": {"syntax_valid": True, "security_issues": []},
+    }
+
     for template, vars, expected_error in test_cases:
-        with pytest.raises(TemplateError) as exc_info:
-            code_generator.generate(
-                prompt_template=template,
-                template_vars=vars,
-                schema={"type": "object", "properties": {}},
-            )
-        assert expected_error in str(exc_info.value).lower()
+        with patch(
+            "evolia.core.code_generator.call_openai_structured",
+            return_value=mock_response,
+        ):
+            with pytest.raises(TemplateError) as exc_info:
+                code_generator.generate(
+                    prompt_template=template,
+                    template_vars=vars,
+                    schema={"type": "object", "properties": {}},
+                )
+            assert expected_error in str(exc_info.value).lower()
 
 
 def test_api_error_handling(code_generator):
