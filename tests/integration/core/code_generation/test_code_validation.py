@@ -1,6 +1,6 @@
 """Tests for code validation functionality."""
 import pytest
-from evolia.core.code_validation import validate_python_code
+from evolia.validation.code_validation import validate_python_code
 from evolia.utils.exceptions import CodeValidationError
 
 

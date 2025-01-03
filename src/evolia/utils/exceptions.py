@@ -142,3 +142,9 @@ class SecurityError(ExecutorError):
     """Error during security checks"""
 
     pass
+
+
+class APIRateLimitError(EvoliaError):
+    """Raised when API rate limit is exceeded."""
+
+    pass
