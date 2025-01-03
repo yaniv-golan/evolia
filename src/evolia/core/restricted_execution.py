@@ -10,12 +10,8 @@ import types
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
-from RestrictedPython import compile_restricted
-from RestrictedPython.Guards import (
-    guarded_iter_unpack_sequence,
-    guarded_unpack_sequence,
-    safe_builtins,
-)
+from RestrictedPython import compile_restricted, safe_builtins
+from RestrictedPython.Guards import safer_getattr
 
 from ..utils.exceptions import EvoliaError, SecurityViolationError
 
@@ -185,12 +181,9 @@ class RestrictedExecutor:
         # Add our custom guarded builtins
         restricted_globals.update(
             {
-                "_getitem_": guarded_getitem,
+                "_getattr_": safer_getattr,
                 "_write_": lambda x: x,  # Allow writing to files
-                "_getattr_": getattr,
                 "_getiter_": iter,
-                "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
-                "_unpack_sequence_": guarded_unpack_sequence,
                 "_print_": print,
                 "_inplacevar_": lambda op, x, y: op(x, y),
                 "__import__": lambda name, globals=None, locals=None, fromlist=(), level=0: restricted_import(
@@ -239,6 +232,11 @@ class RestrictedExecutor:
 
         # Add allowed modules
         restricted_globals["__builtins__"] = restricted_globals
+
+        # Add RestrictedPython guards
+        restricted_globals["_getitem_"] = guarded_getitem
+        restricted_globals["_write_"] = lambda obj: obj  # Allow all writes
+        restricted_globals["_getattr_"] = safer_getattr
 
         # Import and add os module with restricted functionality
         import os

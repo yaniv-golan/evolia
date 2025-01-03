@@ -22,10 +22,9 @@ import numpy as np
 import pandas as pd
 from RestrictedPython import (
     compile_restricted,
-    guarded_getitem,
-    guarded_iter_unpack_sequence,
-    guarded_unpack_sequence,
+    limited_builtins,
     safe_builtins,
+    utility_builtins,
 )
 
 from ..models.models import (
@@ -2045,401 +2044,6 @@ class Executor2:
             self.logger.error(error_msg, exc_info=True)
             raise ExecutorError(error_msg, step, {"error": str(e)})
 
-    def _generate_code(
-        self, request: CodeGenerationRequest
-    ) -> Tuple[CodeGenerationResponse, Dict[str, Any]]:
-        """Generate code using the code generator.
-
-        Args:
-            request: Code generation request
-
-        Returns:
-            Tuple of (CodeGenerationResponse object, raw response data dictionary)
-
-        Raises:
-            CodeGenerationError: If code generation fails
-        """
-        logger = logging.getLogger("evolia")
-
-        with code_generation_context(request) as gen_ctx:
-            try:
-                # Use default system prompt if none provided
-                system_prompt = request.system_prompt
-                if system_prompt is None:
-                    system_prompt = """You are a Python code generator that creates clean, efficient functions.
-Your response must be a valid JSON object, but before generating it, you must:
-
-1. Generate the function code according to the requirements
-2. Identify ALL required imports (both for type hints and functionality)
-3. Perform these validation checks:
-   a. Syntax validation:
-      - Check if the code is valid Python syntax
-      - Verify all required imports are included
-      - Ensure proper indentation and formatting
-   b. Name validation:
-      - Compare the function name with the requested name
-      - Verify it follows Python naming conventions
-   c. Parameter validation:
-      - Check if all required parameters are present
-      - Verify parameter types match the requirements
-      - Ensure parameter names are valid Python identifiers
-   d. Return type validation:
-      - Verify the return type annotation matches requirements
-      - Check if the actual return values match the type
-   e. Security validation:
-      - Check for unsafe operations
-      - Verify no unauthorized imports
-      - Ensure proper error handling
-
-Your response MUST include:
-1. 'code': The function code without imports
-2. 'required_imports': List of ALL import statements needed (e.g. ['from typing import List', 'import re'])
-3. 'function_name': The name of the function
-4. 'parameters': List of parameters with types
-5. 'return_type': Function return type
-6. 'validation_results': Object with syntax_valid and security_issues
-7. 'outputs': Object mapping output names to types and descriptions"""
-
-                # Generate code with OpenAI
-                response_data = self.code_generator.generate(
-                    prompt_template=self.config.get("python_generation", {}).get(
-                        "prompt_template", ""
-                    ),
-                    template_vars={
-                        "description": request.description,
-                        "function_name": request.function_name,
-                        "parameters": [
-                            {
-                                "name": p.name,
-                                "type": p.type,
-                                "description": p.description,
-                            }
-                            for p in request.parameters
-                        ],
-                        "return_type": request.return_type,
-                        "constraints": request.constraints,
-                        "examples": request.examples,
-                        "example_format": request.example_format or "",
-                    },
-                    schema=CODE_SCHEMA,
-                    system_prompt=system_prompt,
-                )
-
-                # Create CodeResponse from the response data
-                code_response = CodeResponse(
-                    code=response_data["code"],
-                    function_name=response_data["function_name"],
-                    parameters=response_data["parameters"],
-                    return_type=response_data["return_type"],
-                    description=request.description,
-                )
-
-                # Validate the generated code
-                with validation_context(code_response) as val_ctx:
-                    # First check the LLM's validation results
-                    llm_validation = response_data.get("validation_results", {})
-                    if not llm_validation.get("syntax_valid"):
-                        raise CodeValidationError(
-                            "LLM detected syntax errors in generated code"
-                        )
-                    if llm_validation.get("security_issues"):
-                        raise SecurityViolationError(
-                            f"LLM detected security issues: {', '.join(llm_validation['security_issues'])}"
-                        )
-
-                    # Get imports from the LLM response
-                    imports = response_data.get("required_imports", [])
-
-                    # Add imports to code for validation
-                    code_with_imports = "\n".join(imports) + "\n\n" + code_response.code
-
-                    # Then perform our own validation
-                    validation_results = validate_python_code(
-                        code_with_imports,
-                        {
-                            "function_name": request.function_name,
-                            "parameters": request.parameters,
-                            "return_type": request.return_type,
-                        },
-                    )
-
-                    # Validate security
-                    security_results = validate_code_security(
-                        code_response.code, self.config
-                    )
-                    validation_results.security_issues = security_results
-
-                    if not validation_results.is_valid:
-                        raise CodeValidationError(
-                            f"Code validation failed: {validation_results.get_error_messages()}"
-                        )
-
-                    # Validate that the generated interface matches the requested interface
-                    # Compare only name and type fields for parameters
-                    generated_params = [
-                        {k: p[k] for k in ["name", "type"]}
-                        for p in response_data["parameters"]
-                    ]
-                    expected_params = [
-                        {k: getattr(p, k) for k in ["name", "type"]}
-                        for p in request.parameters
-                    ]
-                    if generated_params != expected_params:
-                        raise CodeValidationError(
-                            f"Generated parameters do not match requested parameters: expected {expected_params}, got {generated_params}"
-                        )
-                    if response_data["return_type"] != request.return_type:
-                        raise CodeValidationError(
-                            f"Generated return type does not match requested return type: expected {request.return_type}, got {response_data['return_type']}"
-                        )
-
-                    # Convert ValidationResult to ValidationResults
-                    security_issues_list = []
-                    if isinstance(security_results, dict):
-                        security_issues_list = list(security_results.values())
-                    elif isinstance(security_results, list):
-                        security_issues_list = security_results
-
-                    validation_results_model = ValidationResults(
-                        syntax_valid=validation_results.details.get(
-                            "syntax_valid", False
-                        ),
-                        security_issues=security_issues_list,
-                    )
-
-                    # Create outputs dictionary
-                    outputs = {"code_file": OutputDefinition(type="str")}
-                    if "outputs" in response_data:
-                        outputs.update(response_data["outputs"])
-
-                    # Create the CodeGenerationResponse
-                    code_gen_response = CodeGenerationResponse(
-                        code=code_response.code,
-                        validation_results=validation_results_model,
-                        outputs=outputs,
-                        function_name=code_response.function_name,
-                        parameters=code_response.parameters,
-                        return_type=code_response.return_type,
-                        description=code_response.description,
-                    )
-
-                    # Return both responses
-                    return code_gen_response, response_data
-
-            except Exception as e:
-                logger.error(f"Failed to generate code: {str(e)}", exc_info=True)
-                raise CodeGenerationError(f"Failed to generate code: {str(e)}")
-
-    def validate_security(self, code: str) -> None:
-        """Validate code against security policies and RestrictedPython rules"""
-        try:
-            # First validate with AST
-            tree = ast.parse(code)
-            visitor = SecurityVisitor(self.config, self.ephemeral_dir)
-            visitor.visit(tree)
-
-            # Check subprocess policy
-            subprocess_policy = self.config.get("security", {}).get(
-                "subprocess_policy", {}
-            )
-            if subprocess_policy.get("level") == "strict":
-                # In strict mode, no subprocess calls are allowed
-                if any(
-                    node
-                    for node in ast.walk(tree)
-                    if isinstance(node, (ast.Call, ast.Name))
-                    and any(
-                        name in getattr(node, "id", "")
-                        or name in str(getattr(node, "func", ""))
-                        for name in ["subprocess", "os.system", "os.popen"]
-                    )
-                ):
-                    raise SecurityViolationError(
-                        "Subprocess calls are not allowed in strict mode"
-                    )
-
-            # Check network access policy
-            network_policy = self.config.get("security", {}).get("network_policy", {})
-            if network_policy.get("level") == "strict":
-                # In strict mode, no network access is allowed
-                if any(
-                    node
-                    for node in ast.walk(tree)
-                    if isinstance(node, (ast.Call, ast.Name))
-                    and any(
-                        name in getattr(node, "id", "")
-                        or name in str(getattr(node, "func", ""))
-                        for name in ["socket", "urllib", "requests", "http", "ftp"]
-                    )
-                ):
-                    raise SecurityViolationError(
-                        "Network access is not allowed in strict mode"
-                    )
-            elif network_policy.get("level") == "restricted":
-                # In restricted mode, only allowed hosts can be accessed
-                allowed_hosts = network_policy.get("allowed_hosts", [])
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Str) and any(
-                        host in node.s for host in ["http://", "https://", "ftp://"]
-                    ):
-                        host = node.s.split("/")[2]
-                        if not any(
-                            allowed_host in host for allowed_host in allowed_hosts
-                        ):
-                            raise SecurityViolationError(
-                                f"Access to host {host} is not allowed"
-                            )
-
-            # Then try compiling with RestrictedPython
-            try:
-                compile_restricted(code, filename="<string>", mode="exec")
-            except SyntaxError as e:
-                raise SecurityViolationError(
-                    f"Code not compatible with RestrictedPython: {str(e)}"
-                )
-
-        except SyntaxError as e:
-            raise SecurityViolationError(f"Invalid Python syntax: {str(e)}")
-        except SecurityViolationError as e:
-            raise SecurityViolationError(f"Security validation failed: {str(e)}")
-        except Exception as e:
-            raise SecurityViolationError(
-                f"Unexpected security validation error: {str(e)}"
-            )
-
-    def execute(self, code: str, globals_dict: Optional[Dict[str, Any]] = None) -> Any:
-        """Execute code with security checks"""
-        if globals_dict is None:
-            globals_dict = {}
-
-        # Validate security before execution
-        self.validate_security(code)
-
-        try:
-            # Use restricted executor for execution
-            result = self.restricted_executor.execute_in_sandbox(
-                script=code,
-                inputs=globals_dict,
-                output_dir=str(self.artifacts_dir) if self.artifacts_dir else ".",
-            )
-
-            # Return the result if available
-            if "result" in result:
-                return result["result"]
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Code execution failed: {str(e)}")
-            raise ExecutorError(f"Code execution failed: {str(e)}")
-
-    def _call_openai_with_retries(
-        self, user_prompt: str, system_prompt: str = None, max_retries: int = None
-    ) -> Dict[str, Any]:
-        """Call OpenAI with retries for code generation/fixing.
-
-        Args:
-            user_prompt: The prompt to send to OpenAI
-            system_prompt: Optional custom system prompt
-            max_retries: Maximum number of retries, defaults to config value
-
-        Returns:
-            OpenAI response
-
-        Raises:
-            CodeGenerationError: If generation fails after retries
-        """
-        logger = logging.getLogger("evolia")
-
-        if max_retries is None:
-            max_retries = self.config["validation"]["max_syntax_lint_retries"]
-
-        if system_prompt is None:
-            system_prompt = """You are a Python code generator that creates clean, efficient functions.
-Your response must be a valid JSON object, but before generating it, you must:
-
-1. Generate the function code according to the requirements
-2. Identify ALL required imports (both for type hints and functionality)
-3. Perform these validation checks:
-   a. Syntax validation:
-      - Check if the code is valid Python syntax
-      - Verify all required imports are included
-      - Ensure proper indentation and formatting
-   b. Name validation:
-      - Compare the function name with the requested name
-      - Verify it follows Python naming conventions
-   c. Parameter validation:
-      - Check if all required parameters are present
-      - Verify parameter types match the requirements
-      - Ensure parameter names are valid Python identifiers
-   d. Return type validation:
-      - Verify the return type annotation matches requirements
-      - Check if the actual return values match the type
-   e. Security validation:
-      - Check for unsafe operations
-      - Verify no unauthorized imports
-      - Ensure proper error handling
-
-Your response MUST include:
-1. 'code': The function code without imports
-2. 'required_imports': List of ALL import statements needed (e.g. ['from typing import List', 'import re'])
-3. 'function_name': The name of the function
-4. 'parameters': List of parameters with types
-5. 'return_type': Function return type
-6. 'validation_results': Object with syntax_valid and security_issues
-7. 'outputs': Object mapping output names to types and descriptions"""
-
-        for attempt in range(max_retries):
-            try:
-                response = self.code_generator.generate_code(user_prompt, system_prompt)
-                return response
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    error_msg = f"Failed to generate code after {max_retries} attempts. Last error: {str(e)}"
-                    logger.error(error_msg)
-                    raise CodeGenerationError(error_msg)
-                logger.warning(f"Generation attempt {attempt + 1} failed: {str(e)}")
-                continue
-
-    def _load_system_tool(self, tool_name: str) -> Any:
-        """Load a system tool module using importlib.
-
-        Args:
-            tool_name: Name of the tool to load
-
-        Returns:
-            The loaded module
-
-        Raises:
-            ExecutorError: If tool loading fails
-        """
-        logger = logging.getLogger("evolia")
-
-        try:
-            if tool_name not in self.system_tools:
-                raise ExecutorError(f"Unknown system tool: {tool_name}")
-
-            tool = self.system_tools[tool_name]
-            filepath = tool.get("filepath")
-            if not filepath:
-                raise ExecutorError(f"No filepath defined for tool: {tool_name}")
-
-            logger.debug(f"Loading system tool module from {filepath}")
-            spec = importlib.util.spec_from_file_location("tool_module", filepath)
-            if spec is None or spec.loader is None:
-                error_msg = f"Failed to load system tool spec from {filepath}"
-                logger.error(error_msg)
-                raise ExecutorError(error_msg)
-
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            logger.debug(f"Successfully loaded system tool module {filepath}")
-            return module
-
-        except Exception as e:
-            error_msg = f"Error loading system tool {tool_name}: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            raise ExecutorError(error_msg)
-
     def _execute_generate_code(
         self, step: PlanStep, resolved_inputs: Dict[str, Any], step_num: int
     ) -> Dict[str, Any]:
@@ -2466,20 +2070,22 @@ Your response MUST include:
                 else p
                 for p in resolved_inputs.get("parameters", [])
             ]
-            request = CodeGenerationRequest(
+
+            # Use FunctionGenerator directly
+            function_generator = FunctionGenerator(self.code_generator)
+            response = function_generator.generate_function(
+                requirements=resolved_inputs.get("description", ""),
                 function_name=resolved_inputs["function_name"],
                 parameters=parameters,
                 return_type=resolved_inputs.get("return_type"),
-                description=resolved_inputs.get("description"),
-                examples=resolved_inputs.get("examples", []),
-                constraints=resolved_inputs.get("constraints", []),
+                context="\n".join(
+                    [
+                        f"Constraints: {resolved_inputs.get('constraints', [])}",
+                        f"Examples: {resolved_inputs.get('examples', [])}",
+                    ]
+                ),
             )
 
-            logger.info(
-                f"Generated code request with function name: {request.function_name}"
-            )
-
-            code_gen_response, response_data = self._generate_code(request)
             logger.info("Code generation successful")
 
             # Ensure artifacts directory exists and is clean
@@ -2492,15 +2098,15 @@ Your response MUST include:
             logger.info(f"Ensured tmp directory exists: {tmp_dir}")
 
             # Write code to file in tmp directory
-            code_file = tmp_dir / f"{request.function_name}.py"
+            code_file = tmp_dir / f"{resolved_inputs['function_name']}.py"
             logger.info(f"Writing code to file: {code_file}")
 
-            # Get imports from the LLM response
-            imports = response_data.get("required_imports", [])
+            # Get imports from the response
+            imports = response.get("required_imports", [])
             logger.info(f"Required imports from LLM: {imports}")
 
             # Add the code with imports
-            code_with_imports = "\n".join(imports) + "\n\n" + code_gen_response.code
+            code_with_imports = "\n".join(imports) + "\n\n" + response["code"]
 
             # Write the code
             code_file.write_text(code_with_imports)

@@ -155,6 +155,10 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
             else "None"
         )
 
+        # Check if using GPT-4 for COT
+        model_name = self.code_generator.config.model.lower()
+        cot_section = FIX_COT_TEMPLATE if "gpt-4" in model_name else ""
+
         # Prepare template variables
         template_vars = {
             "original_code": code,
@@ -166,9 +170,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
             "allowed_builtins": ", ".join(
                 sorted(self.code_generator.config.allowed_builtins)
             ),
-            "cot_section": FIX_COT_TEMPLATE
-            if "gpt-4" in self.code_generator.config.model.lower()
-            else "",
+            "cot_section": cot_section,
         }
 
         try:

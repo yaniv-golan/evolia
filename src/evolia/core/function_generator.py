@@ -114,6 +114,15 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
             ]
         )
 
+        # Check if using GPT-4 for COT
+        model_name = self.code_generator.config.model.lower()
+        cot_section = FUNCTION_COT_TEMPLATE if "gpt-4" in model_name else ""
+
+        # Add cot_reasoning to required fields if using GPT-4
+        schema = self.function_schema.copy()
+        if "gpt-4" in model_name:
+            schema["required"] = list(schema.get("required", [])) + ["cot_reasoning"]
+
         # Prepare template variables
         template_vars = {
             "requirements": requirements,
@@ -127,9 +136,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
                 sorted(self.code_generator.config.allowed_builtins)
             ),
             "context": context,
-            "cot_section": FUNCTION_COT_TEMPLATE
-            if "gpt-4" in self.code_generator.config.model.lower()
-            else "",
+            "cot_section": cot_section,
         }
 
         try:
@@ -137,7 +144,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
             response = self.code_generator.generate(
                 prompt_template=self.function_template,
                 template_vars=template_vars,
-                schema=self.function_schema,
+                schema=schema,
                 system_prompt=FUNCTION_SYSTEM_PROMPT,
             )
 

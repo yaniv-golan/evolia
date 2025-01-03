@@ -125,10 +125,25 @@ class PlanStep:
             name: OutputDefinition.from_dict(output_def)
             for name, output_def in data["outputs"].items()
         }
+
+        # Deep copy inputs to avoid modifying the original
+        inputs = dict(data["inputs"])
+
+        # Convert parameters to Parameter objects for generate_code steps
+        if data["tool"] == "generate_code" and "parameters" in inputs:
+            inputs["parameters"] = [
+                Parameter(
+                    name=param["name"],
+                    type=param["type"],
+                    description=param.get("description", ""),
+                )
+                for param in inputs["parameters"]
+            ]
+
         return cls(
             name=data["name"],
             tool=data["tool"],
-            inputs=data["inputs"],
+            inputs=inputs,
             outputs=outputs,
             allowed_read_paths=data.get("allowed_read_paths", []),
             allowed_write_paths=data.get("allowed_write_paths", []),
@@ -216,9 +231,14 @@ class GenerateCodeValidation(StepValidationBase):
 
         # Check parameters are valid
         for param in step.inputs["parameters"]:
-            if not param["name"].isidentifier():
+            if not isinstance(param, Parameter):
                 validation.validation_errors.append(
-                    f"Invalid parameter name: {param['name']}"
+                    f"Invalid parameter type: expected Parameter object"
+                )
+                continue
+            if not param.name.isidentifier():
+                validation.validation_errors.append(
+                    f"Invalid parameter name: {param.name}"
                 )
 
         # Check return type is valid
@@ -268,6 +288,8 @@ class ExecuteCodeValidation(StepValidationBase):
                 "Input 'script_file' must be a Python file"
             )
 
+        # Only set matches_interface to True if there are no validation errors
+        validation.matches_interface = len(validation.validation_errors) == 0
         return validation
 
 

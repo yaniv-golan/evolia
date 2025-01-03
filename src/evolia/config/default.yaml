@@ -153,24 +153,56 @@ file_access:
       - "chown"
 
 python_generation:
-  prompt_template: |
-    
-    Write a Python function with these requirements:
+  function_template: |
+    """{cot_section}
 
-    Description: {description}
+    Requirements:
+    {requirements}
 
-    Function Name: {function_name}
-    Parameters:
-    {parameters}
-    Return Type: {return_type}
-    Constraints:
-    {constraints}
+    The function MUST EXACTLY match this interface:
+    1. Name: {function_name}
+    2. Parameters (EXACT names and types required):
+    {parameters_structured}
+    3. Return type (EXACT type required): {return_type}
 
-    Example Format:
-    {example_format}
+    Additional requirements:
+    1. Only use these modules: {allowed_modules}
+    2. Only use these built-ins: {allowed_builtins}
+    3. Include proper error handling
+    4. Have comprehensive docstrings
 
-    Return only the function definition, no explanations.
-    
+    Additional context:
+    {context}
+
+    Your response must include a 'cot_reasoning' field explaining your thought process."""
+  fix_template: |
+    """{cot_section}
+
+    Original Code:
+    {original_code}
+
+    Error Message:
+    {error_msg}
+
+    Previous Fix Attempts:
+    {previous_fixes}
+
+    The fixed code must:
+    1. Fix the specific error while preserving the original functionality
+    2. Keep the exact same function signature
+    3. Only use these modules: {allowed_modules}
+    4. Only use these built-ins: {allowed_builtins}
+    5. Handle the specific error case that occurred
+
+    Your response must include a 'cot_reasoning' field explaining your thought process."""
+  cot_template: |
+    """Let's approach this step by step:
+    1. Understand the requirements
+    2. Confirm the interface
+    3. Plan the implementation
+    4. Consider edge cases and error handling
+    5. Write the code with clear documentation
+    """
   max_tokens: 500
   temperature: 0.7
   top_p: 0.9

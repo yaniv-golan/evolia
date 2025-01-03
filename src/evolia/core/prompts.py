@@ -45,7 +45,8 @@ You specialize in fixing Python code while:
 4. Adding proper error handling"""
 )
 
-# Chain of thought templates
+# NOTE: This CoT template is only inserted when using GPT-4 models.
+# It provides step-by-step reasoning for function generation.
 FUNCTION_COT_TEMPLATE = """Let's approach this step by step:
 1. Understand the requirements
 2. Verify the exact interface requirements:
@@ -60,6 +61,8 @@ FUNCTION_COT_TEMPLATE = """Let's approach this step by step:
 8. Document with docstrings
 9. Validate the interface matches exactly"""
 
+# NOTE: This CoT template is only inserted when using GPT-4 models.
+# It provides step-by-step reasoning for code fixing.
 FIX_COT_TEMPLATE = """Let's fix this step by step:
 1. Analyze the error message
 2. Identify the root cause
