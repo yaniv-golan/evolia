@@ -1,10 +1,14 @@
 """Integration tests using live OpenAI API."""
+import logging
+
 import pytest
 
 from evolia.core.code_generator import CodeGenerationConfig, CodeGenerator
 from evolia.core.function_generator import FunctionGenerator
 from evolia.models.models import Parameter
 from evolia.utils.exceptions import CodeGenerationError
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.integration
@@ -58,7 +62,19 @@ def test_live_code_generation_complex(openai_api_key):
         temperature=0.2,
         max_tokens=1000,
         allowed_modules={"typing", "datetime", "re"},
-        allowed_builtins={"len", "str", "int", "float", "list", "dict"},
+        allowed_builtins={
+            "len",
+            "str",
+            "int",
+            "float",
+            "list",
+            "dict",
+            "set",
+            "sorted",
+            "any",
+            "all",
+            "isinstance",
+        },
     )
     code_generator = CodeGenerator(config)
     function_generator = FunctionGenerator(code_generator)
@@ -67,10 +83,13 @@ def test_live_code_generation_complex(openai_api_key):
     response = function_generator.generate_function(
         requirements="""
         Generate a function that:
-        1. Takes a list of datetime strings in various formats
+        1. Takes a list of datetime strings in various formats (e.g. "YYYY/MM/DD", "MM-DD-YYYY")
         2. Converts them to ISO format (YYYY-MM-DD)
         3. Returns only unique dates in sorted order
         4. Handles invalid dates gracefully by skipping them
+        5. Must handle at least these formats:
+           - "YYYY/MM/DD" (e.g. "2024/01/15")
+           - "MM-DD-YYYY" (e.g. "01-15-2024")
         """,
         function_name="normalize_dates",
         parameters=[
@@ -88,6 +107,10 @@ def test_live_code_generation_complex(openai_api_key):
     assert "code" in response
     assert response["validation_results"]["syntax_valid"]
     assert not response["validation_results"]["security_issues"]
+
+    # Log the generated code and response
+    logger.info("Generated code:\n%s", response["code"])
+    logger.info("Full response:\n%s", response)
 
     # Execute the generated code
     code = response["code"]

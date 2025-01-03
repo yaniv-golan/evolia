@@ -16,16 +16,10 @@ import types
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from RestrictedPython import (
-    compile_restricted,
-    limited_builtins,
-    safe_builtins,
-    utility_builtins,
-)
 
 from ..models.models import (
     CodeGenerationRequest,
@@ -76,11 +70,7 @@ from .interface_verification import (
     verify_constraint,
     verify_tool_interface,
 )
-from .restricted_execution import (
-    RestrictedExecutionError,
-    RestrictedExecutor,
-    restricted_import,
-)
+from .restricted_execution import RestrictedExecutionError, RestrictedExecutor
 
 logger = logging.getLogger("evolia")
 
@@ -1128,44 +1118,17 @@ class Executor2:
 
         Args:
             inputs: Tool inputs
-            step_dir: Step directory
+            step_dir: Directory for step artifacts
 
         Returns:
             Dict of restricted globals
         """
-        # Start with basic restricted globals
-        restricted_globals = {
-            "__builtins__": {
-                **safe_builtins,
-                "__import__": lambda name, globals=None, locals=None, fromlist=(), level=0: restricted_import(
-                    name,
-                    globals,
-                    locals,
-                    fromlist,
-                    level,
-                    allowed_modules=self.allowed_modules,
-                ),
-            },
-            "_getiter_": guarded_iter_unpack_sequence,
-            "_unpack_sequence_": guarded_unpack_sequence,
-            "_getitem_": guarded_getitem,
-            "inputs": inputs,
-            "output_dir": str(step_dir),
-        }
-
-        # Add allowed modules with security checks
-        for module_name in self.allowed_modules:
-            try:
-                module = importlib.import_module(module_name)
-                if hasattr(module, "__file__"):
-                    module_path = Path(module.__file__)
-                    if not any(str(module_path).startswith(str(p)) for p in sys.path):
-                        continue
-                restricted_globals[module_name] = module
-            except ImportError:
-                continue
-
-        return restricted_globals
+        # Use RestrictedExecutor to prepare globals with enhanced security
+        return self.restricted_executor.prepare_restricted_globals(
+            inputs=inputs,
+            output_dir=str(step_dir),
+            allowed_modules=self.allowed_modules,
+        )
 
     def _load_system_tool_module(self, filepath: str) -> Optional[Any]:
         """Load a system tool module using importlib"""
@@ -1840,10 +1803,12 @@ class Executor2:
         Returns:
             Dictionary of restricted globals
         """
-        logger = self.logger  # Use the class logger instead of creating a new one
-
-        # Use RestrictedExecutor to prepare globals
-        return self.restricted_executor.prepare_restricted_globals({}, str(step_dir))
+        # Use RestrictedExecutor to prepare globals with enhanced security
+        return self.restricted_executor.prepare_restricted_globals(
+            inputs={},  # No inputs at this stage
+            output_dir=str(step_dir),
+            allowed_modules=self.allowed_modules,
+        )
 
     def _execute_in_sandbox(
         self,
@@ -1869,15 +1834,27 @@ class Executor2:
             ExecutorError: If execution fails
         """
         try:
-            # Prepare globals with inputs (using deep copy for safety)
-            globals_dict = {
-                **copy.deepcopy(restricted_globals),
-                "inputs": copy.deepcopy(resolved_inputs),
-                "step_dir": step_dir,  # String is immutable, no need to copy
-            }
+            # Start with provided globals or create new ones
+            globals_dict = copy.deepcopy(
+                restricted_globals if restricted_globals else {}
+            )
 
-            # Execute code in restricted environment
-            result = self.restricted_executor.execute(script, globals_dict)
+            # Update globals through RestrictedExecutor
+            globals_dict = self.restricted_executor.prepare_restricted_globals(
+                inputs=resolved_inputs,
+                output_dir=step_dir,
+                allowed_modules=self.allowed_modules,
+                existing_globals=globals_dict,
+            )
+
+            # Execute in sandbox with prepared globals
+            result = self.restricted_executor.execute_in_sandbox(
+                script=script,
+                inputs=resolved_inputs,
+                output_dir=step_dir,
+                function_name=step.inputs.get("function_name"),
+                globals_dict=globals_dict,
+            )
 
             # Validate result type
             if not isinstance(result, dict):
@@ -1892,10 +1869,38 @@ class Executor2:
 
             return result
 
-        except Exception as e:
-            error_msg = f"Sandbox execution failed: {str(e)}"
+        except RestrictedExecutionError as e:
+            # Handle sandbox security violations
+            error_msg = f"Security violation in sandbox: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
-            raise ExecutorError(error_msg, script, {"error": str(e)})
+            raise ExecutorError(
+                error_msg,
+                script,
+                {
+                    "error": str(e),
+                    "type": "security_violation",
+                    "details": e.details if hasattr(e, "details") else None,
+                },
+            )
+        except SecurityViolationError as e:
+            # Handle security-specific violations
+            error_msg = f"Security constraint violation: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            raise ExecutorError(
+                error_msg,
+                script,
+                {
+                    "error": str(e),
+                    "type": "security_violation",
+                },
+            )
+        except Exception as e:
+            # Handle other unexpected errors
+            error_msg = f"Unexpected error in sandbox execution: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            raise ExecutorError(
+                error_msg, script, {"error": str(e), "type": "runtime_error"}
+            )
 
     def _validate_step_inputs(self, step: PlanStep) -> None:
         """Validate step inputs.

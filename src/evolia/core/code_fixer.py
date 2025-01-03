@@ -6,7 +6,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from .code_generator import CodeGenerator
-from .prompts import BASE_VALIDATION_SCHEMA, FIX_COT_TEMPLATE, FIX_SYSTEM_PROMPT
+from .prompts import (
+    BASE_VALIDATION_SCHEMA,
+    FIX_COT_TEMPLATE,
+    FIX_PROMPT,
+    FIX_PROMPT_WITH_COT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +184,9 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
                 prompt_template=self.fix_template,
                 template_vars=template_vars,
                 schema=self.fix_schema,
-                system_prompt=FIX_SYSTEM_PROMPT,
+                system_prompt=FIX_PROMPT_WITH_COT
+                if "gpt-4" in model_name
+                else FIX_PROMPT,
             )
 
             # Add to fix history

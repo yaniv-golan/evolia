@@ -188,7 +188,10 @@ def call_openai_structured(
                 ],
                 response_format={
                     "type": "json_schema",
-                    "json_schema": {"name": "structured_output", "schema": json_schema},
+                    "json_schema": {
+                        "name": "structured_output",
+                        "schema": json_schema,
+                    },
                 },
                 temperature=temperature,
                 max_tokens=max_tokens,

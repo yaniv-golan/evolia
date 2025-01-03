@@ -7,14 +7,15 @@ from .code_generator import CodeGenerator
 from .prompts import (
     BASE_VALIDATION_SCHEMA,
     FUNCTION_COT_TEMPLATE,
-    FUNCTION_SYSTEM_PROMPT,
+    FUNCTION_PROMPT,
+    FUNCTION_PROMPT_WITH_COT,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class FunctionGenerator:
-    """Specialized generator for Python functions."""
+    """Function generator that uses CodeGenerator."""
 
     def __init__(self, code_generator: CodeGenerator):
         """Initialize with CodeGenerator instance."""
@@ -23,25 +24,22 @@ class FunctionGenerator:
         # Template for generating functions
         self.function_template = """{cot_section}
 
-Requirements:
-{requirements}
+Requirements: 
+1. Write a function "{function_name}" that:
+   - Has parameters {parameters_structured}
+   - Returns a {return_type}
+2. The function must do exactly:
+   {requirements}
 
-The function MUST EXACTLY match this interface:
-1. Name: {function_name}
-2. Parameters (EXACT names and types required):
-{parameters_structured}
-3. Return type (EXACT type required): {return_type}
+Allowed modules: {allowed_modules}
+Allowed built-ins: {allowed_builtins}
 
 Additional requirements:
-1. Only use these modules: {allowed_modules}
-2. Only use these built-ins: {allowed_builtins}
-3. Include proper error handling
-4. Have comprehensive docstrings
-
-Additional context:
+- Must have a docstring describing the function
+- Must handle errors gracefully
 {context}
 
-Your response must include a 'cot_reasoning' field explaining your thought process."""
+Return *only* the JSON object with the fields described in the system prompt."""
 
         # Schema for function generation
         self.function_schema = {
@@ -116,11 +114,12 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
 
         # Check if using GPT-4 for COT
         model_name = self.code_generator.config.model.lower()
-        cot_section = FUNCTION_COT_TEMPLATE if "gpt-4" in model_name else ""
+        is_gpt4 = "gpt-4" in model_name
+        cot_section = FUNCTION_COT_TEMPLATE if is_gpt4 else ""
 
         # Add cot_reasoning to required fields if using GPT-4
         schema = self.function_schema.copy()
-        if "gpt-4" in model_name:
+        if is_gpt4:
             schema["required"] = list(schema.get("required", [])) + ["cot_reasoning"]
 
         # Prepare template variables
@@ -145,7 +144,7 @@ Your response must include a 'cot_reasoning' field explaining your thought proce
                 prompt_template=self.function_template,
                 template_vars=template_vars,
                 schema=schema,
-                system_prompt=FUNCTION_SYSTEM_PROMPT,
+                system_prompt=FUNCTION_PROMPT_WITH_COT if is_gpt4 else FUNCTION_PROMPT,
             )
 
             logger.debug(

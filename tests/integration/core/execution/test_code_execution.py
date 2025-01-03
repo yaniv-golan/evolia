@@ -19,7 +19,7 @@ def execute_test_cases(code: str, test_cases: list, timeout: int = 5) -> dict:
         Dictionary with test results including passed/failed counts and failure details
     """
     executor = RestrictedExecutor(
-        allowed_modules={"math", "typing"},
+        allowed_modules={"math", "typing", "inspect"},
         allowed_builtins={"len", "str", "int", "float", "sum"},
     )
 
@@ -36,7 +36,11 @@ def execute_test_cases(code: str, test_cases: list, timeout: int = 5) -> dict:
     # Get parameter names from function definition
     param_names = [arg.arg for arg in func.args.args]
 
+    print(f"\nExecuting test cases for function: {func_name}")
+    print(f"Parameter names: {param_names}")
+
     for case in test_cases:
+        print(f"\nExecuting test case: {case}")
         try:
             # Set up timeout using signal
             import signal
@@ -56,12 +60,27 @@ def execute_test_cases(code: str, test_cases: list, timeout: int = 5) -> dict:
                             f"Expected {len(param_names)} arguments, got {len(inputs)}"
                         )
                     inputs = dict(zip(param_names, inputs))
+                print(f"Converted inputs: {inputs}")
 
-                result = executor.execute_in_sandbox(code, inputs, ".")
+                result = executor.execute_in_sandbox(code, inputs, ".", func_name)
                 signal.alarm(0)  # Disable alarm
+                print(f"Execution result: {result}")
 
-                if result == case["expected"]:
+                # If expected is None, we expect an error
+                if case["expected"] is None:
+                    results["failed"] += 1
+                    results["failures"].append(
+                        {
+                            "inputs": case["inputs"],
+                            "expected": None,
+                            "actual": result,
+                            "error": "Expected error but got result",
+                        }
+                    )
+                    print("Failed: Expected error but got result")
+                elif result == case["expected"]:
                     results["passed"] += 1
+                    print("Passed: Result matches expected")
                 else:
                     results["failed"] += 1
                     results["failures"].append(
@@ -72,6 +91,9 @@ def execute_test_cases(code: str, test_cases: list, timeout: int = 5) -> dict:
                             "error": "Output mismatch",
                         }
                     )
+                    print(
+                        f"Failed: Output mismatch. Expected {case['expected']}, got {result}"
+                    )
             except TimeoutError:
                 results["failed"] += 1
                 results["failures"].append(
@@ -81,6 +103,22 @@ def execute_test_cases(code: str, test_cases: list, timeout: int = 5) -> dict:
                         "error": "Execution timed out",
                     }
                 )
+                print("Failed: Execution timed out")
+            except (TypeError, ValueError) as e:
+                # For type/value errors, check if this was expected
+                if case["expected"] is None:
+                    results["passed"] += 1
+                    print(f"Passed: Got expected error - {str(e)}")
+                else:
+                    results["failed"] += 1
+                    results["failures"].append(
+                        {
+                            "inputs": case["inputs"],
+                            "expected": case["expected"],
+                            "error": str(e),
+                        }
+                    )
+                    print(f"Failed: Unexpected error - {str(e)}")
             except Exception as e:
                 results["failed"] += 1
                 results["failures"].append(
@@ -90,6 +128,7 @@ def execute_test_cases(code: str, test_cases: list, timeout: int = 5) -> dict:
                         "error": str(e),
                     }
                 )
+                print(f"Failed: Unexpected error - {str(e)}")
             finally:
                 signal.alarm(0)  # Ensure alarm is disabled
 
@@ -102,7 +141,9 @@ def execute_test_cases(code: str, test_cases: list, timeout: int = 5) -> dict:
                     "error": str(e),
                 }
             )
+            print(f"Failed: Test case error - {str(e)}")
 
+    print(f"\nFinal results: {results}")
     return results
 
 
@@ -193,7 +234,9 @@ def calculate_circle_area(radius: float) -> float:
 def test_execute_with_type_validation():
     """Test execution with type validation."""
     code = """
-def process_list(items: list) -> int:
+from typing import List
+
+def process_list(items: List[int]) -> int:
     return sum(items)
 """
     test_cases = [
