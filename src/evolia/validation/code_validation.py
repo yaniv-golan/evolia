@@ -23,27 +23,28 @@ class ValidationResult:
 
 def validate_schema(data: dict, schema_type: Any) -> Dict[str, Any]:
     """Validate data against a schema type.
-    
+
     Args:
         data: The data to validate
         schema_type: The schema type to validate against
-        
+
     Returns:
         Dict[str, Any]: The validated data
-        
+
     Raises:
         ValidationError: If validation fails
     """
     from evolia.utils.exceptions import ValidationError
-    
+
     try:
         # Convert schema type to dict if needed
         if hasattr(schema_type, "schema"):
             schema = schema_type.schema()
         else:
             schema = schema_type
-            
+
         import jsonschema
+
         jsonschema.validate(instance=data, schema=schema)
         return data
     except jsonschema.exceptions.ValidationError as e:

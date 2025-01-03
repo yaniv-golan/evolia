@@ -8,9 +8,9 @@ def test_execute_basic_test_cases():
     """Test execution of basic test cases."""
     executor = RestrictedExecutor(
         allowed_modules={"math", "typing"},
-        allowed_builtins={"len", "str", "int", "float"}
+        allowed_builtins={"len", "str", "int", "float"},
     )
-    
+
     code = """
 def add(a, b):
     return a + b

@@ -4,6 +4,7 @@ import pytest
 from evolia.core.executor2 import Executor2 as Executor
 from evolia.utils.exceptions import ExecutorError
 
+
 def test_executor_initialization():
     """Test executor initialization."""
     config = {
