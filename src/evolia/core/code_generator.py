@@ -1,12 +1,12 @@
 """Core code generation functionality using OpenAI's structured output."""
 
-from typing import Dict, Any, Optional, Set, List
 from dataclasses import dataclass, field
 import logging
+from typing import Any, Dict, List, Optional, Set
 
-from ..models.models import Parameter
-from ..integrations.openai_structured import call_openai_structured
 from ..core.prompts import BASE_VALIDATION_SCHEMA
+from ..integrations.openai_structured import call_openai_structured
+from ..models.models import Parameter
 from ..models.schemas import CODE_SCHEMA
 from ..utils.exceptions import CodeGenerationError
 

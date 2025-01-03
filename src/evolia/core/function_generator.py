@@ -1,13 +1,13 @@
 """Specialized function generator built on top of CodeGenerator."""
 
-from typing import Dict, Any, Optional, List
 import logging
+from typing import Any, Dict, List, Optional
 
 from .code_generator import CodeGenerator
 from .prompts import (
-    FUNCTION_SYSTEM_PROMPT,
-    FUNCTION_COT_TEMPLATE,
     BASE_VALIDATION_SCHEMA,
+    FUNCTION_COT_TEMPLATE,
+    FUNCTION_SYSTEM_PROMPT,
 )
 
 logger = logging.getLogger(__name__)

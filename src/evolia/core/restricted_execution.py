@@ -1,18 +1,21 @@
 """Restricted execution module for Evolia."""
 
-import os
-import sys
 import builtins
 import importlib
-from pathlib import Path
-from typing import Dict, Any, Optional, Set
-from RestrictedPython import compile_restricted
-from RestrictedPython.Guards import safe_builtins
-from RestrictedPython.Guards import guarded_iter_unpack_sequence
-from RestrictedPython.Guards import guarded_unpack_sequence
 import logging
-import types
+import os
+import sys
 import traceback
+import types
+from pathlib import Path
+from typing import Any, Dict, Optional, Set
+
+from RestrictedPython import compile_restricted
+from RestrictedPython.Guards import (
+    guarded_iter_unpack_sequence,
+    guarded_unpack_sequence,
+    safe_builtins,
+)
 
 from ..utils.exceptions import EvoliaError, SecurityViolationError
 

@@ -1,7 +1,7 @@
 """Interface verification methods for executor2."""
 
 import ast
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 from ..models.models import FunctionInterface
 
 

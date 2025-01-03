@@ -1,62 +1,63 @@
 """Main Evolia module."""
 
-import os
-import sys
+import argparse
 import json
 import logging
-import argparse
-import yaml
+import os
+import sys
 import time
 from pathlib import Path
-from dotenv import load_dotenv
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
+import yaml
+from dotenv import load_dotenv
+
+from ..integrations.openai_structured import call_openai_structured
 from ..models import (
-    Plan,
-    PlanStep,
     CodeGenerationRequest,
-    GeneratedCode,
-    Parameter,
     CodeGenerationResponse,
     CodeResponse,
+    ExecuteCodeValidation,
     ExecutionRequest,
     ExecutionResponse,
+    FunctionInterface,
+    GenerateCodeValidation,
+    GeneratedCode,
+    InterfaceValidation,
+    OutputDefinition,
+    Parameter,
+    Plan,
+    PlanStep,
+    StepValidationBase,
+    SystemTool,
+    SystemToolValidation,
     TestCase,
     TestResults,
     ValidationResults,
-    SystemTool,
-    FunctionInterface,
-    InterfaceValidation,
-    SystemToolValidation,
-    GenerateCodeValidation,
-    ExecuteCodeValidation,
-    StepValidationBase,
-    OutputDefinition,
 )
-from ..integrations.openai_structured import call_openai_structured
-from ..security.file_access import get_safe_open, FileAccessViolationError
-from .executor2 import Executor2
-from .interface_verification import verify_interface
-from .promotion import ToolPromoter, PromotionError
-from .candidate_manager import CandidateManager
-from ..utils.logger import (
-    setup_logger,
-    code_generation_context,
-    validation_context,
-    execution_context,
-)
-from ..validation.code_validation import validate_python_code
+from ..security.file_access import FileAccessViolationError, get_safe_open
 from ..security.security import validate_code_security
 from ..utils.exceptions import (
+    CodeExecutionError,
     CodeGenerationError,
     CodeValidationError,
-    CodeExecutionError,
-    SecurityViolationError,
-    PlanValidationError,
+    ExecutorError,
     PlanExecutionError,
     PlanGenerationError,
-    ExecutorError,
+    PlanValidationError,
+    SecurityViolationError,
 )
+from ..utils.logger import (
+    code_generation_context,
+    execution_context,
+    setup_logger,
+    validation_context,
+)
+from ..validation.code_validation import validate_python_code
+from .candidate_manager import CandidateManager
+from .executor2 import Executor2
+from .interface_verification import verify_interface
+from .promotion import PromotionError, ToolPromoter
 
 logger = logging.getLogger("evolia")
 
