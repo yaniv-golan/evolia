@@ -56,10 +56,10 @@ def validate_schema(data: dict, schema_type: Any) -> Dict[str, Any]:
             for error in errors:
                 path = " -> ".join(str(p) for p in error.path) if error.path else "root"
                 error_messages.append(f"{path}: {error.message}")
-            
+
             raise ValidationError(
                 "Schema validation failed:\n" + "\n".join(error_messages),
-                details={"schema_errors": error_messages}
+                details={"schema_errors": error_messages},
             )
 
         return data
@@ -131,9 +131,7 @@ def _check_undefined_type_hints(tree: ast.AST) -> List[str]:
                         node.returns.value.id not in defined_names
                         and node.returns.value.id not in __builtins__
                     ):
-                        issues.append(
-                            f"Undefined type hint: {node.returns.value.id}"
-                        )
+                        issues.append(f"Undefined type hint: {node.returns.value.id}")
 
             # Check argument annotations
             for arg in node.args.args:
@@ -161,28 +159,42 @@ def _check_undefined_type_hints(tree: ast.AST) -> List[str]:
 
 def _check_security_constraints(tree: ast.AST, constraints: List[str]) -> List[str]:
     """Check for security violations in the AST.
-    
+
     Args:
         tree: AST to check
         constraints: List of security constraints to enforce
-        
+
     Returns:
         List of security violation messages
     """
     issues = []
-    
+
     for node in ast.walk(tree):
         # Check for system calls (os.system, subprocess.run, etc)
         if "no_system_calls" in constraints:
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Attribute):
-                    if node.func.attr == "system" and isinstance(node.func.value, ast.Name) and node.func.value.id == "os":
+                    if (
+                        node.func.attr == "system"
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "os"
+                    ):
                         issues.append("Security violation: os.system call detected")
-                    elif node.func.attr == "run" and isinstance(node.func.value, ast.Name) and node.func.value.id == "subprocess":
-                        issues.append("Security violation: subprocess.run call detected")
-                    elif node.func.attr == "popen" and isinstance(node.func.value, ast.Name) and node.func.value.id == "os":
+                    elif (
+                        node.func.attr == "run"
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "subprocess"
+                    ):
+                        issues.append(
+                            "Security violation: subprocess.run call detected"
+                        )
+                    elif (
+                        node.func.attr == "popen"
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "os"
+                    ):
                         issues.append("Security violation: os.popen call detected")
-        
+
         # Check for code injection functions (eval, exec, etc)
         if "no_eval" in constraints:
             if isinstance(node, ast.Call):
@@ -190,99 +202,116 @@ def _check_security_constraints(tree: ast.AST, constraints: List[str]) -> List[s
                     "eval": "code evaluation",
                     "exec": "code execution",
                     "compile": "code compilation",
-                    "__import__": "dynamic imports"
+                    "__import__": "dynamic imports",
                 }
-                
+
                 if isinstance(node.func, ast.Name):
                     if node.func.id in dangerous_functions:
-                        issues.append(f"Security violation: Dangerous {dangerous_functions[node.func.id]} using {node.func.id}()")
+                        issues.append(
+                            f"Security violation: Dangerous {dangerous_functions[node.func.id]} using {node.func.id}()"
+                        )
                 elif isinstance(node.func, ast.Attribute):
                     if node.func.attr in dangerous_functions:
-                        issues.append(f"Security violation: Dangerous {dangerous_functions[node.func.attr]} using {node.func.attr}()")
-        
+                        issues.append(
+                            f"Security violation: Dangerous {dangerous_functions[node.func.attr]} using {node.func.attr}()"
+                        )
+
         # Check for dangerous imports
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             dangerous_modules = {
                 "subprocess": "subprocess operations",
                 "socket": "network operations",
                 "pickle": "unsafe deserialization",
-                "marshal": "unsafe deserialization"
+                "marshal": "unsafe deserialization",
             }
-            
+
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name in dangerous_modules:
-                        issues.append(f"Security violation: Dangerous import of {alias.name} for {dangerous_modules[alias.name]}")
+                        issues.append(
+                            f"Security violation: Dangerous import of {alias.name} for {dangerous_modules[alias.name]}"
+                        )
             elif isinstance(node, ast.ImportFrom):
                 if node.module in dangerous_modules:
-                    issues.append(f"Security violation: Dangerous import from {node.module} for {dangerous_modules[node.module]}")
-    
+                    issues.append(
+                        f"Security violation: Dangerous import from {node.module} for {dangerous_modules[node.module]}"
+                    )
+
     return issues
 
 
 def _check_file_operations(node: ast.AST, allowed_paths: List[str]) -> List[str]:
     """Check file operations for path violations.
-    
+
     Args:
         node: AST node to check
         allowed_paths: List of allowed file paths
-        
+
     Returns:
         List of file access violation messages
     """
     issues = []
-    
+
     if isinstance(node, ast.Call):
         # Check open() calls
-        if isinstance(node.func, ast.Name) and node.func.id == 'open':
+        if isinstance(node.func, ast.Name) and node.func.id == "open":
             if len(node.args) >= 1:
                 # Get the file path argument
                 path_arg = node.args[0]
                 if isinstance(path_arg, ast.Constant):
                     file_path = path_arg.value
                     # Check if path is allowed
-                    if not any(str(file_path).startswith(allowed) for allowed in allowed_paths):
-                        issues.append(f"File access violation: Attempted to access {file_path} outside allowed paths {allowed_paths}")
-                        
+                    if not any(
+                        str(file_path).startswith(allowed) for allowed in allowed_paths
+                    ):
+                        issues.append(
+                            f"File access violation: Attempted to access {file_path} outside allowed paths {allowed_paths}"
+                        )
+
         # Check file operations through pathlib
         elif isinstance(node.func, ast.Attribute):
-            if isinstance(node.func.value, ast.Name) and node.func.value.id == 'Path':
-                if node.func.attr in {'open', 'write_text', 'write_bytes', 'touch'}:
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "Path":
+                if node.func.attr in {"open", "write_text", "write_bytes", "touch"}:
                     # Get the file path from Path construction
                     if len(node.args) >= 1:
                         path_arg = node.args[0]
                         if isinstance(path_arg, ast.Constant):
                             file_path = path_arg.value
-                            if not any(str(file_path).startswith(allowed) for allowed in allowed_paths):
-                                issues.append(f"File access violation: Attempted to access {file_path} outside allowed paths {allowed_paths}")
-    
+                            if not any(
+                                str(file_path).startswith(allowed)
+                                for allowed in allowed_paths
+                            ):
+                                issues.append(
+                                    f"File access violation: Attempted to access {file_path} outside allowed paths {allowed_paths}"
+                                )
+
     return issues
 
 
 def _check_allowed_modules(tree: ast.AST, allowed_modules: Set[str]) -> List[str]:
     """Check that only allowed modules are imported.
-    
+
     Args:
         tree: AST to check
         allowed_modules: Set of module names that are allowed to be imported
-        
+
     Returns:
         List of module violation messages
     """
     issues = []
-    
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                module_name = alias.name.split('.')[0]  # Get base module name
+                module_name = alias.name.split(".")[0]  # Get base module name
                 if module_name not in allowed_modules:
                     issues.append(f"Module not allowed: {module_name}")
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                module_name = node.module.split('.')[0]  # Get base module name
+                module_name = node.module.split(".")[0]  # Get base module name
                 if module_name not in allowed_modules:
                     issues.append(f"Module not allowed: {module_name}")
-    
+
     return issues
 
 
@@ -332,7 +361,9 @@ def validate_python_code(code: str, requirements: Dict[str, Any]) -> ValidationR
     # Check file operations if allowed paths are specified
     if "allowed_write_paths" in requirements:
         for node in ast.walk(tree):
-            file_issues = _check_file_operations(node, requirements["allowed_write_paths"])
+            file_issues = _check_file_operations(
+                node, requirements["allowed_write_paths"]
+            )
             if file_issues:
                 issues.extend(file_issues)
 
@@ -464,14 +495,28 @@ def execute_test_cases(
     try:
         # Create restricted executor with common modules
         from evolia.core.restricted_execution import RestrictedExecutor
+
         executor = RestrictedExecutor(
             allowed_modules={"math", "typing", "datetime", "json", "re"},
-            allowed_builtins={"len", "str", "int", "float", "bool", "list", "dict", "tuple", "pow", "print"}
+            allowed_builtins={
+                "len",
+                "str",
+                "int",
+                "float",
+                "bool",
+                "list",
+                "dict",
+                "tuple",
+                "pow",
+                "print",
+            },
         )
 
         # Find the function name by parsing the AST
         tree = ast.parse(code)
-        functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+        functions = [
+            node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+        ]
         if not functions:
             raise ValueError("No function found in code")
         func_name = functions[0]
@@ -510,7 +555,7 @@ def execute_test_cases(
                         script=code,
                         inputs=input_dict,
                         output_dir=".",
-                        function_name=func_name
+                        function_name=func_name,
                     )
                     signal.alarm(0)  # Disable alarm
 
@@ -518,36 +563,32 @@ def execute_test_cases(
                         results["passed"] += 1
                     else:
                         results["failed"] += 1
-                        results["failures"].append({
-                            "test_case": i,
-                            "inputs": inputs,
-                            "expected": expected,
-                            "actual": actual,
-                        })
+                        results["failures"].append(
+                            {
+                                "test_case": i,
+                                "inputs": inputs,
+                                "expected": expected,
+                                "actual": actual,
+                            }
+                        )
                 except TimeoutError:
                     results["failed"] += 1
-                    results["failures"].append({
-                        "test_case": i,
-                        "inputs": inputs,
-                        "error": "Timeout"
-                    })
+                    results["failures"].append(
+                        {"test_case": i, "inputs": inputs, "error": "Timeout"}
+                    )
                 except Exception as e:
                     results["failed"] += 1
-                    results["failures"].append({
-                        "test_case": i,
-                        "inputs": inputs,
-                        "error": str(e)
-                    })
+                    results["failures"].append(
+                        {"test_case": i, "inputs": inputs, "error": str(e)}
+                    )
                 finally:
                     signal.alarm(0)  # Ensure alarm is disabled
 
             except Exception as e:
                 results["failed"] += 1
-                results["failures"].append({
-                    "test_case": i,
-                    "inputs": test.get("inputs", []),
-                    "error": str(e)
-                })
+                results["failures"].append(
+                    {"test_case": i, "inputs": test.get("inputs", []), "error": str(e)}
+                )
 
     except Exception as e:
         results["error"] = str(e)

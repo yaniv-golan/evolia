@@ -1,8 +1,8 @@
 """Plan validation functionality."""
 from typing import Any, Dict, List
 
-from evolia.utils.exceptions import ValidationError
 from evolia.models import PlanStep, SystemTool, SystemToolValidation
+from evolia.utils.exceptions import ValidationError
 
 
 def validate_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
@@ -21,7 +21,9 @@ def validate_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
     return plan
 
 
-def validate_step_interface(step: PlanStep, system_tools: Dict[str, SystemTool]) -> SystemToolValidation:
+def validate_step_interface(
+    step: PlanStep, system_tools: Dict[str, SystemTool]
+) -> SystemToolValidation:
     """Validate a step against its interface.
 
     Args:
@@ -41,16 +43,22 @@ def validate_step_interface(step: PlanStep, system_tools: Dict[str, SystemTool])
         if step.tool in {"generate_code", "execute_code"}:
             return SystemToolValidation(matches_interface=True, validation_errors=[])
         validation_errors.append(f"Unknown tool: {step.tool}")
-        return SystemToolValidation(matches_interface=False, validation_errors=validation_errors)
+        return SystemToolValidation(
+            matches_interface=False, validation_errors=validation_errors
+        )
 
     # Validate inputs
-    required_inputs = {param.name for param in tool.parameters if not getattr(param, "optional", False)}
+    required_inputs = {
+        param.name for param in tool.parameters if not getattr(param, "optional", False)
+    }
     provided_inputs = set(step.inputs.keys())
-    
+
     missing_inputs = required_inputs - provided_inputs
     if missing_inputs:
         matches_interface = False
-        validation_errors.append(f"Missing required inputs: {', '.join(missing_inputs)}")
+        validation_errors.append(
+            f"Missing required inputs: {', '.join(missing_inputs)}"
+        )
 
     # Validate outputs
     for output_name, output_def in step.outputs.items():
@@ -65,6 +73,5 @@ def validate_step_interface(step: PlanStep, system_tools: Dict[str, SystemTool])
             )
 
     return SystemToolValidation(
-        matches_interface=matches_interface,
-        validation_errors=validation_errors
+        matches_interface=matches_interface, validation_errors=validation_errors
     )
