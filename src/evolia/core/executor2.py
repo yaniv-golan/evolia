@@ -15,7 +15,6 @@ from contextlib import contextmanager
 from RestrictedPython import (
     compile_restricted,
     safe_builtins,
-    restricted_import,
     guarded_iter_unpack_sequence,
     guarded_unpack_sequence,
     guarded_getitem,
