@@ -12,7 +12,14 @@ import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set, Tuple
 from contextlib import contextmanager
-from RestrictedPython import compile_restricted
+from RestrictedPython import (
+    compile_restricted,
+    safe_builtins,
+    restricted_import,
+    guarded_iter_unpack_sequence,
+    guarded_unpack_sequence,
+    guarded_getitem,
+)
 import pandas as pd
 import numpy as np
 import time
@@ -1499,7 +1506,7 @@ class Executor2:
         Raises:
             PlanValidationError: If validation fails
         """
-        logger = logging.getLogger("evolia")
+        logger = self.logger  # Use the class logger instead of creating a new one
 
         # Track step names and outputs
         step_names = set()
@@ -1830,6 +1837,8 @@ class Executor2:
         Returns:
             Dictionary of restricted globals
         """
+        logger = self.logger  # Use the class logger instead of creating a new one
+
         # Use RestrictedExecutor to prepare globals
         return self.restricted_executor.prepare_restricted_globals({}, str(step_dir))
 

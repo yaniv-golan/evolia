@@ -38,6 +38,7 @@ from ..security.file_access import get_safe_open, FileAccessViolationError
 from .executor2 import Executor2
 from .interface_verification import verify_interface
 from .promotion import ToolPromoter, PromotionError
+from .candidate_manager import CandidateManager
 from ..utils.logger import (
     setup_logger,
     code_generation_context,
@@ -56,6 +57,8 @@ from ..utils.exceptions import (
     PlanGenerationError,
     ExecutorError,
 )
+
+logger = logging.getLogger("evolia")
 
 PLAN_GENERATION_PROMPT = """You are a plan generator that creates strictly linear execution plans.
 Each step must have:

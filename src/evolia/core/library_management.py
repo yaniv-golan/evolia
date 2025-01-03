@@ -14,6 +14,7 @@ import importlib.metadata
 from typing import Dict, Any, List, Optional, Set, Union, Tuple
 from pathlib import Path
 from packaging.version import Version
+from packaging.requirements import Requirement
 
 from ..utils.logger import setup_logger
 from ..utils.exceptions import SecurityViolationError
