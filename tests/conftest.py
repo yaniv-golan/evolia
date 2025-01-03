@@ -5,6 +5,12 @@ import pytest
 
 
 @pytest.fixture
+def is_github_actions():
+    """Check if tests are running in GitHub Actions."""
+    return os.getenv("GITHUB_ACTIONS") == "true"
+
+
+@pytest.fixture
 def openai_api_key():
     """Get OpenAI API key from environment variable."""
     api_key = os.getenv("OPENAI_API_KEY")

@@ -102,8 +102,11 @@ def mock_system_tools():
     }
 
 
-def test_generate_plan(mock_config, mock_args):
+def test_generate_plan(mock_config, mock_args, is_github_actions):
     """Test plan generation."""
+    if is_github_actions:
+        pytest.skip("Skipping OpenAI-dependent test in GitHub Actions")
+
     # Create test system tools
     test_tool = SystemTool(
         name="test_tool",

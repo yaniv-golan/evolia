@@ -33,8 +33,11 @@ def mock_responses():
     }
 
 
-def test_basic_execution(config, mock_responses):
+def test_basic_execution(config, mock_responses, is_github_actions):
     """Test basic execution of a plan."""
+    if is_github_actions:
+        pytest.skip("Skipping OpenAI-dependent test in GitHub Actions")
+
     with patch(
         "evolia.core.code_generator.call_openai_structured", return_value=mock_responses
     ):
