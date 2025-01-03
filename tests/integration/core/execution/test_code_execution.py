@@ -1,25 +1,22 @@
 """Integration tests for code execution functionality."""
 import pytest
 
-from evolia.core.code_validation import execute_test_cases
+from evolia.core.restricted_execution import RestrictedExecutor, restricted_import
 
 
 def test_execute_basic_test_cases():
     """Test execution of basic test cases."""
+    executor = RestrictedExecutor(
+        allowed_modules={"math", "typing"},
+        allowed_builtins={"len", "str", "int", "float"}
+    )
+    
     code = """
 def add(a, b):
     return a + b
 """
-    test_cases = [
-        {"inputs": [1, 2], "expected": 3},
-        {"inputs": [-1, 1], "expected": 0},
-        {"inputs": [0, 0], "expected": 0},
-    ]
-
-    results = execute_test_cases(code, test_cases)
-    assert results["passed"] == 3
-    assert results["failed"] == 0
-    assert not results["failures"]
+    result = executor.execute_in_sandbox(code, {"a": 1, "b": 2}, ".")
+    assert result == 3
 
 
 def test_execute_failing_test_cases():

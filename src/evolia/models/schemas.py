@@ -88,3 +88,70 @@ CODE_SCHEMA = {
         "required_imports",
     ],
 }
+
+"""Schema definitions for data validation."""
+
+from typing import Dict, List, Optional, Union
+
+# Base schemas
+ParameterSchema = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "type": {"type": "string"},
+        "description": {"type": "string"},
+        "optional": {"type": "boolean"},
+        "default": {"type": ["string", "number", "boolean", "null"]},
+    },
+    "required": ["name", "type", "description"],
+    "additionalProperties": False,
+}
+
+ReturnTypeSchema = {
+    "type": "object",
+    "properties": {
+        "type": {"type": "string"},
+        "description": {"type": "string"},
+        "schema": {"type": "object"},  # For complex return types
+    },
+    "required": ["type"],
+    "additionalProperties": False,
+}
+
+# Function schema
+FunctionSchema = {
+    "type": "object",
+    "properties": {
+        "function_name": {"type": "string"},
+        "parameters": {
+            "type": "array",
+            "items": ParameterSchema,
+        },
+        "return_type": {"type": "string"},
+        "description": {"type": "string"},
+        "constraints": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["function_name", "parameters", "return_type"],
+    "additionalProperties": False,
+}
+
+# Validation result schema
+ValidationResultSchema = {
+    "type": "object",
+    "properties": {
+        "syntax_valid": {"type": "boolean"},
+        "security_issues": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "type_issues": {
+            "type": ["array", "null"],
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["syntax_valid", "security_issues"],
+    "additionalProperties": False,
+}

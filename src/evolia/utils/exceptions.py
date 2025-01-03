@@ -148,3 +148,12 @@ class APIRateLimitError(EvoliaError):
     """Raised when API rate limit is exceeded."""
 
     pass
+
+
+class TemplateError(EvoliaError):
+    """Error during template processing."""
+
+    def __init__(self, message: str, template: str = None, details: dict = None):
+        super().__init__(message)
+        self.template = template
+        self.details = details or {}
