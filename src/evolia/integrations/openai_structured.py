@@ -1,9 +1,10 @@
 """OpenAI API integration with structured output support."""
-import os
 import json
-import time
 import logging
-from typing import Dict, Any, Optional
+import os
+import time
+from typing import Any, Dict, Optional
+
 import openai
 from openai import OpenAI
 

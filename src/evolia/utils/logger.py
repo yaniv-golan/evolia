@@ -1,16 +1,17 @@
 """Logging configuration for Evolia"""
+import json
 import logging
 import sys
-import json
 import time
-from pathlib import Path
-from typing import Optional, Dict, Any
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 from ..models.models import (
-    Parameter,
-    OutputDefinition,
     CodeGenerationRequest,
     CodeResponse,
+    OutputDefinition,
+    Parameter,
 )
 
 

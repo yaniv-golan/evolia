@@ -1,8 +1,8 @@
 """Rate limiting functionality for network requests"""
-import time
 import logging
-from typing import List, Optional
+import time
 from functools import wraps
+from typing import List, Optional
 
 from .logger import setup_logger
 

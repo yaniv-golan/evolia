@@ -1,8 +1,8 @@
 import logging
-from pathlib import Path
-from typing import List, IO, Union, Dict, Any, Optional
 import re
 import stat
+from pathlib import Path
+from typing import IO, Any, Dict, List, Optional, Union
 
 
 class FileAccessViolationError(Exception):

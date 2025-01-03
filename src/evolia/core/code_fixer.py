@@ -1,12 +1,12 @@
 """Specialized code fixer built on top of CodeGenerator."""
 
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from .code_generator import CodeGenerator
-from .prompts import FIX_SYSTEM_PROMPT, FIX_COT_TEMPLATE, BASE_VALIDATION_SCHEMA
+from .prompts import BASE_VALIDATION_SCHEMA, FIX_COT_TEMPLATE, FIX_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 

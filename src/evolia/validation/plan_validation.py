@@ -1,5 +1,5 @@
 """Plan validation functionality."""
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from evolia.utils.exceptions import ValidationError
 

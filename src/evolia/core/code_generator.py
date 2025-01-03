@@ -1,7 +1,7 @@
 """Core code generation functionality using OpenAI's structured output."""
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from ..core.prompts import BASE_VALIDATION_SCHEMA

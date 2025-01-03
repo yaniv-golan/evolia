@@ -1,7 +1,8 @@
 """Example tool that demonstrates the enhanced metadata structure"""
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 
 
 def process_data(input_path: str, output_dir: str) -> str:

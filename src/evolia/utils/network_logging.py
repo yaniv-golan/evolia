@@ -1,9 +1,10 @@
 """Network logging functionality"""
-import requests
 import time
-from typing import Optional, Dict, Any, List
-from urllib.parse import urlparse
 from contextlib import contextmanager
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
+
+import requests
 
 from .logger import setup_logger
 

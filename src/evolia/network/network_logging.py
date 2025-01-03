@@ -1,8 +1,9 @@
 """Network request logging and control functionality"""
 import logging
-import requests
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+import requests
 
 from .logger import setup_logger
 from .network_rate_limiter import RateLimiter

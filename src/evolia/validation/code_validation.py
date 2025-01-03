@@ -1,9 +1,9 @@
 """Code validation and execution utilities"""
 import ast
-import logging
 import inspect
-from typing import Dict, Any, List, Tuple, Optional
+import logging
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("evolia")
 
