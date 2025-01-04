@@ -44,3 +44,4 @@ logs/
 # Mac
 .DS_Store 
 venv/
+plans/
